@@ -1008,6 +1008,9 @@ TITLE_HTML = """
 </div>
 """
 
+# Hide API key input when GROQ_API_KEY is pre-set (e.g. HuggingFace Spaces secret)
+_KEY_PRECONFIGURED = bool(os.getenv("GROQ_API_KEY", ""))
+
 EXAMPLES = [
     ["https://apple.com",     ""],
     ["https://nvidia.com",    ""],
@@ -1028,13 +1031,14 @@ with gr.Blocks(css=CSS, title="ScoutAI — Smart Company Analyst Agent") as demo
         url_input = gr.Textbox(
             label="Company Website URL",
             placeholder="https://nvidia.com",
-            scale=4,
+            scale=5,
         )
         api_key_input = gr.Textbox(
             label="Groq API Key",
             placeholder="gsk_... (free at console.groq.com)",
             type="password",
             scale=3,
+            visible=not _KEY_PRECONFIGURED,
         )
         analyze_btn = gr.Button("🔍 Analyze", variant="primary", scale=1, elem_id="analyze-btn")
 
@@ -1076,7 +1080,7 @@ with gr.Blocks(css=CSS, title="ScoutAI — Smart Company Analyst Agent") as demo
     gr.Examples(
         examples=EXAMPLES,
         inputs=[url_input, api_key_input],
-        label="Quick examples (add your Groq key first)",
+        label="Quick examples" if _KEY_PRECONFIGURED else "Quick examples (add your Groq key first)",
     )
 
     gr.HTML("""

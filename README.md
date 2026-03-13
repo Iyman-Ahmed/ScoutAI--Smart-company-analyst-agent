@@ -95,16 +95,20 @@ User Input (URL)
 
 ## Getting Started
 
-### 1. Get a Free Groq API Key
+### On HuggingFace Spaces
+No setup needed — just paste a company URL and click **Analyze**. The API key is pre-configured.
+
+### Running Locally
+You'll need a free Groq API key:
 1. Go to **[console.groq.com](https://console.groq.com)**
 2. Sign up for free — no credit card required
 3. Click **Create API Key**
-4. Paste the key into the app (or set `GROQ_API_KEY` as an environment variable)
+4. Paste it into the API key field in the app
 
-### 2. Enter the Company URL
+### 1. Enter the Company URL
 Paste any company website — e.g. `https://nvidia.com` or `https://stripe.com`
 
-### 3. Click Analyze
+### 2. Click Analyze
 The agents run in parallel. Full dashboard + report in ~30–90 seconds.
 
 ---
