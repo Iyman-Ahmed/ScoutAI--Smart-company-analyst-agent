@@ -4,7 +4,7 @@ emoji: 🔍
 colorFrom: purple
 colorTo: indigo
 sdk: gradio
-sdk_version: 4.44.0
+sdk_version: 5.29.0
 app_file: app.py
 pinned: false
 short_description: Drop a URL. Get a full intelligence report + dashboard.
