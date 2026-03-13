@@ -1,13 +1,13 @@
 ---
 title: ScoutAI
 emoji: 🔍
-colorFrom: violet
-colorTo: purple
+colorFrom: purple
+colorTo: indigo
 sdk: gradio
 sdk_version: 4.44.0
 app_file: app.py
 pinned: false
-short_description: Smart company analyst agent — drop a URL, get a full intelligence report + live financial dashboard.
+short_description: Drop a URL. Get a full intelligence report + dashboard.
 ---
 
 # 🔍 ScoutAI — Smart Company Analyst Agent
