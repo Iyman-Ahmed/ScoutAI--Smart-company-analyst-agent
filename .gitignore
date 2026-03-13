@@ -1,0 +1,57 @@
+# Python
+venv/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.Python
+
+# Environment & secrets
+.env
+.env.*
+*.env
+ngrok.yml
+
+# SQLite caches
+*.sqlite
+*.sqlite3
+*.db
+
+# Temporary files
+*.tmp
+*.log
+/tmp/
+*.bak
+~$*
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Claude Code session data
+.claude/
+
+# Large/unnecessary files
+*.docx
+*.xlsx
+*.pdf
+
+# Playwright browsers (large, installed via playwright install)
+playwright-browsers/
+
+# HuggingFace cache
+.cache/
