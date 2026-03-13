@@ -1084,8 +1084,42 @@ with gr.Blocks(css=CSS, title="ScoutAI — Smart Company Analyst Agent") as demo
     )
 
     gr.HTML("""
-    <div style='text-align:center;margin-top:24px;font-size:0.78rem;color:#475569'>
-      ScoutAI · Data from public sources · Not financial advice
+    <div style='text-align:center;margin-top:32px;padding:20px 0 8px;
+                border-top:1px solid #1E293B'>
+      <div style='font-size:0.85rem;font-weight:600;color:#CBD5E1;margin-bottom:8px'>
+        Developed by <span style='color:#A78BFA'>Iyman Ahmed</span>
+      </div>
+      <div style='display:flex;justify-content:center;align-items:center;gap:20px;
+                  flex-wrap:wrap;font-size:0.78rem;margin-bottom:10px'>
+        <a href='https://github.com/Iyman-Ahmed/ScoutAI--Smart-company-analyst-agent'
+           target='_blank' rel='noopener'
+           style='color:#64748B;text-decoration:none;display:flex;align-items:center;gap:5px'>
+          <svg width='14' height='14' viewBox='0 0 24 24' fill='#64748B'>
+            <path d='M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z'/>
+          </svg>
+          GitHub Repo
+        </a>
+        <a href='https://iymanahmed.tech' target='_blank' rel='noopener'
+           style='color:#64748B;text-decoration:none;display:flex;align-items:center;gap:5px'>
+          <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='#64748B' stroke-width='2'>
+            <circle cx='12' cy='12' r='10'/><line x1='2' y1='12' x2='22' y2='12'/>
+            <path d='M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z'/>
+          </svg>
+          iymanahmed.tech
+        </a>
+        <a href='mailto:iyman12393@gmail.com'
+           style='color:#64748B;text-decoration:none;display:flex;align-items:center;gap:5px'>
+          <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='#64748B' stroke-width='2'>
+            <path d='M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z'/>
+            <polyline points='22,6 12,13 2,6'/>
+          </svg>
+          iyman12393@gmail.com
+        </a>
+      </div>
+      <div style='font-size:0.72rem;color:#334155'>
+        &copy; 2025 Iyman Ahmed &nbsp;&middot;&nbsp; ScoutAI &nbsp;&middot;&nbsp;
+        Data from public sources &nbsp;&middot;&nbsp; Not financial advice
+      </div>
     </div>
     """)
 
