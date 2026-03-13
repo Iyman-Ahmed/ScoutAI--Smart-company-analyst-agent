@@ -16,18 +16,23 @@ from config import MAX_SEARCH_RESULTS
 
 logger = logging.getLogger(__name__)
 
-SEARCH_DELAY = 1.2  # seconds between DDG queries to avoid rate-limiting
+SEARCH_DELAY = 2.5   # seconds between DDG queries (HuggingFace IPs get rate-limited faster)
+MAX_RETRIES  = 2     # retry a failed query before giving up
 
 
 def _safe_search(ddgs: DDGS, query: str, max_results: int = MAX_SEARCH_RESULTS) -> list[dict]:
-    try:
-        results = list(ddgs.text(query, max_results=max_results))
-        time.sleep(SEARCH_DELAY)
-        return results
-    except Exception as e:
-        logger.warning(f"DDG search failed for '{query}': {e}")
-        time.sleep(2)
-        return []
+    """Search with retry + exponential backoff to handle DDG rate limiting on shared IPs."""
+    for attempt in range(MAX_RETRIES):
+        try:
+            results = list(ddgs.text(query, max_results=max_results))
+            time.sleep(SEARCH_DELAY)
+            return results
+        except Exception as e:
+            wait = SEARCH_DELAY * (2 ** attempt)   # 2.5s → 5s → give up
+            logger.warning(f"DDG search failed (attempt {attempt+1}) for '{query}': {e} — retrying in {wait:.1f}s")
+            time.sleep(wait)
+    logger.error(f"DDG search gave up after {MAX_RETRIES} attempts: '{query}'")
+    return []
 
 
 def _format_results(results: list[dict], label: str) -> str:
@@ -54,37 +59,29 @@ def research_external(company_name: str, domain: str = "") -> dict:
     ddgs = DDGS()
     sections = {}
 
-    # 1. General overview & Wikipedia
-    results = _safe_search(ddgs, f"{company_name} company overview Wikipedia")
-    sections["overview"] = _format_results(results, "General Overview / Wikipedia")
+    # 1. General overview, Wikipedia & leadership
+    results = _safe_search(ddgs, f"{company_name} company overview CEO founder leadership Wikipedia")
+    sections["overview"] = _format_results(results, "General Overview & Leadership")
 
     # 2. Recent news (last 12 months)
     results = _safe_search(ddgs, f"{company_name} company news 2025 2026")
     sections["news"] = _format_results(results, "Recent News (2025-2026)")
 
-    # 3. LinkedIn presence
-    results = _safe_search(ddgs, f"{company_name} LinkedIn company employees founded")
-    sections["linkedin"] = _format_results(results, "LinkedIn & Employee Data")
+    # 3. Funding, investors & revenue
+    results = _safe_search(ddgs, f"{company_name} funding raised investors revenue ARR growth Crunchbase")
+    sections["funding"] = _format_results(results, "Funding, Revenue & Investors")
 
-    # 4. Funding & investors
-    results = _safe_search(ddgs, f"{company_name} funding raised investors Crunchbase series")
-    sections["funding"] = _format_results(results, "Funding & Investors")
-
-    # 5. Revenue & financials (public info)
-    results = _safe_search(ddgs, f"{company_name} annual revenue ARR growth 2024 2025")
-    sections["revenue"] = _format_results(results, "Revenue & Growth")
-
-    # 6. Competitors & market position
+    # 4. Competitors & market position
     results = _safe_search(ddgs, f"{company_name} competitors market alternatives vs")
     sections["competitors"] = _format_results(results, "Competitors & Market Position")
 
-    # 7. Customer reviews & reputation
+    # 5. Customer reviews & reputation
     results = _safe_search(ddgs, f"{company_name} reviews G2 Trustpilot Glassdoor rating")
     sections["reviews"] = _format_results(results, "Customer & Employee Reviews")
 
-    # 8. Key people / leadership
-    results = _safe_search(ddgs, f"{company_name} CEO founder leadership team")
-    sections["leadership"] = _format_results(results, "Key Leadership")
+    # 6. LinkedIn, employees & team size
+    results = _safe_search(ddgs, f"{company_name} LinkedIn employees team size founded headquarters")
+    sections["linkedin"] = _format_results(results, "LinkedIn & Employee Data")
 
     # Combine into one text block
     combined = "\n\n".join(sections.values())
