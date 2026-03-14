@@ -617,6 +617,217 @@ def build_health_html(raw_financial: dict) -> str:
     )
 
 
+# ─── Trader Scorecard ─────────────────────────────────────────────────────────
+
+def build_trader_scorecard(raw_financial: dict) -> str:
+    rd     = raw_financial.get("raw_data", {})
+    is_pub = raw_financial.get("is_public", False)
+
+    if not is_pub or not rd:
+        return (
+            "<div style='padding:8px 0'>"
+            "<h3 style='font-size:15px;font-weight:700;color:#F1F5F9;margin:0 0 10px 0;"
+            "padding-bottom:8px;border-bottom:2px solid #334155'>📊 Trader Scorecard</h3>"
+            "<div style='padding:14px 16px;background:#1A1200;border-left:4px solid #F97316;"
+            "border-radius:6px;font-size:13px;color:#FED7AA'>"
+            "🔒 Trader scorecard requires public market data (listed companies only). "
+            "See the AI report below for qualitative insights."
+            "</div></div>"
+        )
+
+    def _float(val):
+        if val is None:
+            return None
+        try:
+            s = str(val).replace(",", "").replace("$", "").replace("%", "").strip()
+            return float(s) if s and s != "N/A" else None
+        except Exception:
+            return None
+
+    pe        = _float(rd.get("pe_ratio"))
+    peg       = _float(rd.get("peg_ratio"))
+    pb        = _float(rd.get("price_to_book"))
+    ev_ebitda = _float(rd.get("ev_ebitda"))
+    short_r   = _float(rd.get("short_ratio"))
+    w52_chg   = _float(rd.get("week52_change"))
+    tgt_hi    = _float(rd.get("target_high"))
+    tgt_lo    = _float(rd.get("target_low"))
+    tgt_mean  = _float(rd.get("analyst_target"))
+    price     = _float(rd.get("current_price"))
+    anl_count = _float(rd.get("analyst_count"))
+    payout    = _float(rd.get("payout_ratio"))
+    div_yield = rd.get("dividend_yield", "N/A")
+    beta      = _float(rd.get("beta"))
+    rec_key   = str(rd.get("analyst_recommendation", "")).lower()
+    eps_ttm   = rd.get("eps_ttm", "N/A")
+    eps_fwd   = rd.get("eps_forward", "N/A")
+
+    upside_pct = ((tgt_mean - price) / price * 100) if price and tgt_mean and price > 0 else None
+
+    # ── Valuation signal ─────────────────────────────────────────────────
+    val_score = 0
+    if pe  is not None: val_score += 2 if pe < 15 else (1 if pe < 25 else (-1 if pe > 40 else 0))
+    if peg is not None: val_score += 2 if peg < 1 else (1 if peg < 2 else (-1 if peg > 3 else 0))
+    if val_score >= 3:   val_label, val_color, val_bg = "Undervalued",   "#4ADE80", "#052E16"
+    elif val_score >= 1: val_label, val_color, val_bg = "Fairly Valued", "#FCD34D", "#1C1917"
+    else:                val_label, val_color, val_bg = "Expensive",     "#F87171", "#2D0A0A"
+
+    # ── Momentum signal ──────────────────────────────────────────────────
+    if w52_chg is not None:
+        if w52_chg > 20:    mom_label, mom_color, mom_bg = "Strong Bull", "#4ADE80", "#052E16"
+        elif w52_chg > 5:   mom_label, mom_color, mom_bg = "Bullish",     "#86EFAC", "#064E3B"
+        elif w52_chg < -20: mom_label, mom_color, mom_bg = "Strong Bear", "#F87171", "#2D0A0A"
+        elif w52_chg < -5:  mom_label, mom_color, mom_bg = "Bearish",     "#FCA5A5", "#450A0A"
+        else:               mom_label, mom_color, mom_bg = "Neutral",     "#FCD34D", "#1C1917"
+    else:
+        mom_label, mom_color, mom_bg = "N/A", "#94A3B8", "#1E293B"
+
+    # ── Analyst verdict ──────────────────────────────────────────────────
+    rec_map = {
+        "strong_buy":   ("Strong Buy",    "#4ADE80", "#052E16"),
+        "buy":          ("Buy",           "#86EFAC", "#064E3B"),
+        "hold":         ("Hold",          "#FCD34D", "#1C1917"),
+        "underperform": ("Underperform",  "#FCA5A5", "#450A0A"),
+        "sell":         ("Sell",          "#F87171", "#2D0A0A"),
+        "strong_sell":  ("Strong Sell",   "#EF4444", "#450A0A"),
+    }
+    rec_label, rec_color, rec_bg = rec_map.get(rec_key, ("N/A", "#94A3B8", "#1E293B"))
+
+    # ── Overall signal ───────────────────────────────────────────────────
+    sig = 0
+    if val_score > 0: sig += 1
+    if w52_chg and w52_chg > 0: sig += 1
+    if rec_key in ("strong_buy", "buy"):   sig += 2
+    if rec_key in ("sell", "strong_sell"): sig -= 2
+    if upside_pct and upside_pct > 15: sig += 1
+    if short_r  and short_r > 5:       sig -= 1
+    if peg and peg > 3:                sig -= 1
+
+    if sig >= 3:   sig_label, sig_color, sig_bg = "🟢 BULLISH", "#4ADE80", "#052E16"
+    elif sig >= 1: sig_label, sig_color, sig_bg = "🟡 NEUTRAL", "#FCD34D", "#1C1917"
+    else:          sig_label, sig_color, sig_bg = "🔴 BEARISH", "#F87171", "#2D0A0A"
+
+    # ── Signal chips ─────────────────────────────────────────────────────
+    def _chip(label, value, color, bg):
+        return (
+            f"<div style='background:{bg};border:1.5px solid {color}40;border-radius:10px;"
+            f"padding:14px 16px;min-width:130px;flex:1;text-align:center'>"
+            f"<div style='font-size:10px;font-weight:700;color:#64748B;letter-spacing:.8px;"
+            f"text-transform:uppercase;margin-bottom:6px'>{label}</div>"
+            f"<div style='font-size:15px;font-weight:800;color:{color}'>{value}</div>"
+            f"</div>"
+        )
+
+    chips_html = (
+        _chip("Overall Signal",   sig_label,  sig_color,  sig_bg)  +
+        _chip("Valuation",        val_label,  val_color,  val_bg)  +
+        _chip("52W Momentum",     mom_label,  mom_color,  mom_bg)  +
+        _chip("Analyst Verdict",  rec_label,  rec_color,  rec_bg)
+    )
+
+    # ── Key trade metric cards ────────────────────────────────────────────
+    def _fmt(val, spec="{:.2f}", suffix=""):
+        if val is None: return "N/A"
+        try: return spec.format(val) + suffix
+        except Exception: return str(val)
+
+    def _trade_card(label, value, note="", color="#94A3B8"):
+        return (
+            f"<div style='background:#1E293B;border:1.5px solid #334155;border-radius:10px;"
+            f"padding:12px 14px;min-width:130px;flex:1'>"
+            f"<div style='font-size:10px;font-weight:700;color:#64748B;letter-spacing:.7px;"
+            f"text-transform:uppercase;margin-bottom:5px'>{label}</div>"
+            f"<div style='font-size:18px;font-weight:800;color:{color};margin-bottom:3px'>{value}</div>"
+            f"<div style='font-size:10.5px;color:#475569'>{note}</div>"
+            f"</div>"
+        )
+
+    peg_c    = ("#4ADE80" if peg and peg < 1 else "#FCD34D" if peg and peg < 2 else "#F87171") if peg else "#94A3B8"
+    short_c  = ("#F87171" if short_r and short_r > 5 else "#FCD34D" if short_r and short_r > 2 else "#4ADE80") if short_r else "#94A3B8"
+    mom_c    = ("#4ADE80" if w52_chg and w52_chg > 0 else "#F87171") if w52_chg is not None else "#94A3B8"
+    up_c     = ("#4ADE80" if upside_pct and upside_pct > 15 else "#F87171" if upside_pct and upside_pct < -10 else "#FCD34D") if upside_pct is not None else "#94A3B8"
+    pb_c     = ("#4ADE80" if pb and pb < 3 else "#FCD34D" if pb and pb < 6 else "#F87171") if pb else "#94A3B8"
+    beta_c   = ("#4ADE80" if beta and 0.5 <= beta <= 1.2 else "#FCD34D" if beta and beta <= 2 else "#F87171") if beta else "#94A3B8"
+    eveb_c   = ("#4ADE80" if ev_ebitda and ev_ebitda < 15 else "#FCD34D" if ev_ebitda and ev_ebitda < 25 else "#F87171") if ev_ebitda else "#94A3B8"
+
+    tgt_range  = f"${tgt_lo:.0f}–${tgt_hi:.0f}" if tgt_lo and tgt_hi else "N/A"
+    upside_str = _fmt(upside_pct, "{:+.1f}", "%") if upside_pct is not None else "N/A"
+
+    row1 = (
+        _trade_card("PEG Ratio",        _fmt(peg),             "< 1 = growth underpriced",     peg_c)  +
+        _trade_card("Short Ratio",       _fmt(short_r, "{:.1f}"), "> 5 = heavy short pressure", short_c)+
+        _trade_card("52W Return",        _fmt(w52_chg, "{:+.1f}", "%"), "vs 1 year ago",        mom_c)  +
+        _trade_card("Upside to Target",  upside_str,            tgt_range,                      up_c)
+    )
+    row2 = (
+        _trade_card("Price / Book",      _fmt(pb, "{:.1f}"),    "< 3 = value territory",        pb_c)   +
+        _trade_card("EV / EBITDA",       _fmt(ev_ebitda, "{:.1f}"), "< 15 = cheap",             eveb_c) +
+        _trade_card("Beta",              _fmt(beta),            "market sensitivity",            beta_c) +
+        _trade_card("Analysts",          _fmt(anl_count, "{:.0f}"), rec_label,                  rec_color)
+    )
+    row3 = (
+        _trade_card("EPS (TTM)",         str(eps_ttm),          "trailing 12m earnings/share",  "#94A3B8") +
+        _trade_card("EPS (Forward)",     str(eps_fwd),          "next 12m estimate",            "#94A3B8") +
+        _trade_card("Dividend Yield",    str(div_yield),        "annual % yield",               "#94A3B8") +
+        _trade_card("Payout Ratio",      _fmt(payout, "{:.0f}", "%"), "% earnings paid as div",  "#94A3B8")
+    )
+
+    # ── Bullish / Risk flags ──────────────────────────────────────────────
+    greens, risks = [], []
+    if peg and peg < 1:           greens.append(f"PEG {peg:.2f} — growing faster than it costs")
+    if upside_pct and upside_pct > 20: greens.append(f"{upside_pct:.1f}% upside to analyst consensus target")
+    if rec_key in ("strong_buy", "buy"):
+        greens.append(f"Analyst consensus: {rec_label} ({int(anl_count) if anl_count else '?'} analysts)")
+    if short_r and short_r < 2:   greens.append(f"Low short interest ({short_r:.1f} days to cover)")
+    if w52_chg and w52_chg > 30:  greens.append(f"Strong 12-month momentum (+{w52_chg:.1f}%)")
+
+    if short_r and short_r > 5:   risks.append(f"High short interest ({short_r:.1f} days to cover) — bearish pressure")
+    if peg and peg > 3:           risks.append(f"Stretched valuation — PEG {peg:.2f} implies growth disappointment risk")
+    if beta and beta > 2:         risks.append(f"High volatility — Beta {beta:.2f}, expect wide price swings")
+    if upside_pct and upside_pct < -15: risks.append(f"Trading {abs(upside_pct):.1f}% above analyst mean target")
+    if w52_chg and w52_chg < -30: risks.append(f"Significant drawdown — down {abs(w52_chg):.0f}% over past year")
+    if payout and payout > 90:    risks.append(f"Payout ratio {payout:.0f}% — dividend sustainability risk")
+
+    notes_html = ""
+    if greens or risks:
+        g_html = r_html = ""
+        if greens:
+            items = "".join(f"<li style='margin:3px 0;font-size:12.5px;color:#A7F3D0'>✅ {g}</li>" for g in greens)
+            g_html = (
+                f"<div style='flex:1;min-width:200px;background:#052E16;border:1px solid #14532D;"
+                f"border-radius:8px;padding:12px 14px'>"
+                f"<div style='font-size:11px;font-weight:700;color:#4ADE80;text-transform:uppercase;"
+                f"letter-spacing:.6px;margin-bottom:8px'>Bullish Signals</div>"
+                f"<ul style='margin:0;padding-left:16px'>{items}</ul></div>"
+            )
+        if risks:
+            items = "".join(f"<li style='margin:3px 0;font-size:12.5px;color:#FCA5A5'>⚠️ {r}</li>" for r in risks)
+            r_html = (
+                f"<div style='flex:1;min-width:200px;background:#2D0A0A;border:1px solid #450A0A;"
+                f"border-radius:8px;padding:12px 14px'>"
+                f"<div style='font-size:11px;font-weight:700;color:#F87171;text-transform:uppercase;"
+                f"letter-spacing:.6px;margin-bottom:8px'>Risk Flags</div>"
+                f"<ul style='margin:0;padding-left:16px'>{items}</ul></div>"
+            )
+        notes_html = f"<div style='display:flex;gap:14px;flex-wrap:wrap;margin-top:14px'>{g_html}{r_html}</div>"
+
+    return (
+        "<div style='padding:8px 0'>"
+        "<h3 style='font-size:15px;font-weight:700;color:#F1F5F9;margin:0 0 12px 0;"
+        "padding-bottom:8px;border-bottom:2px solid #334155'>📊 Trader Scorecard</h3>"
+        f"<div style='display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px'>{chips_html}</div>"
+        "<div style='font-size:10.5px;font-weight:700;color:#64748B;text-transform:uppercase;"
+        "letter-spacing:.7px;margin:0 0 8px'>Key Trade Metrics</div>"
+        f"<div style='display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px'>{row1}</div>"
+        f"<div style='display:flex;flex-wrap:wrap;gap:10px;margin-bottom:10px'>{row2}</div>"
+        f"<div style='display:flex;flex-wrap:wrap;gap:10px'>{row3}</div>"
+        f"{notes_html}"
+        "<div style='font-size:10px;color:#334155;margin-top:12px;text-align:right'>"
+        "Not financial advice · For informational purposes only</div>"
+        "</div>"
+    )
+
+
 # ─── Competitor Comparison Table ──────────────────────────────────────────────
 
 def build_competitor_table_html(raw_financial: dict, company_name: str) -> str:
@@ -632,7 +843,7 @@ def build_competitor_table_html(raw_financial: dict, company_name: str) -> str:
             "<div style='padding:14px 16px;background:#2D1B00;border-left:4px solid #F97316;"
             "border-radius:6px;font-size:13px;color:#FED7AA'>"
             "🔒 Competitor comparison is only available for publicly traded companies. "
-            "Qualitative competitive analysis is available in the <em>Competitive Landscape</em> tab."
+            "Qualitative competitive analysis is available in the <em>Full AI Report</em> section below."
             "</div></div>"
         )
 
@@ -688,7 +899,7 @@ def build_competitor_table_html(raw_financial: dict, company_name: str) -> str:
             "<tr><td colspan='9' style='padding:14px 12px;text-align:center;color:#64748B;"
             "font-size:12px;font-style:italic;background:#1E293B'>"
             "Yahoo Finance peer data not available for this ticker — "
-            "see the <strong>Competitive Landscape</strong> tab for qualitative analysis."
+            "see the <strong>Full AI Report</strong> section below for qualitative analysis."
             "</td></tr>"
         )
 
@@ -800,7 +1011,7 @@ def analyze_company(url: str, groq_api_key: str, progress=gr.Progress(track_tqdm
       4  metrics_html_out     5  trends_plot (FCF)
       6  margin_plot          7  health_html_out
       8  comp_html_out        9  news_html_out
-      10 competition_md       11 news_md
+      10 trader_scorecard_html  11 full_report_md
       12 download_btn
     """
     EMPTY = ("", "", None, None, "", None, None, "", "", "", "", "", None)
@@ -822,7 +1033,7 @@ def analyze_company(url: str, groq_api_key: str, progress=gr.Progress(track_tqdm
         "⏳ Agents running — scraping website, searching web, pulling financials...",  # 1 status
         None, None,                                                            # 2-3 plots
         "", None, None, "", "", "",                                            # 4-9 HTML/plots
-        "*Analyzing...*", "*Analyzing...*",                                    # 10-11 tabs
+        "", "*Analyzing — full report loading...*",                            # 10-11
         None,                                                                  # 12 download
     )
     progress(0.05, desc="Starting agents...")
@@ -846,26 +1057,23 @@ def analyze_company(url: str, groq_api_key: str, progress=gr.Progress(track_tqdm
     news_items   = state.get("news_items", [])
 
     # Build charts + HTML widgets
-    stock_fig    = build_stock_chart(raw_fin, company_name)
-    revenue_fig  = build_revenue_chart(raw_fin, company_name)
-    fcf_fig      = build_fcf_chart(raw_fin, company_name)
-    margin_fig   = build_margin_chart(raw_fin, company_name)
-    metrics_html = build_metrics_html(raw_fin)
-    health_html  = build_health_html(raw_fin)
-    comp_html    = build_competitor_table_html(raw_fin, company_name)
-    news_html    = build_news_html(news_items)
+    stock_fig        = build_stock_chart(raw_fin, company_name)
+    revenue_fig      = build_revenue_chart(raw_fin, company_name)
+    fcf_fig          = build_fcf_chart(raw_fin, company_name)
+    margin_fig       = build_margin_chart(raw_fin, company_name)
+    metrics_html     = build_metrics_html(raw_fin)
+    health_html      = build_health_html(raw_fin)
+    comp_html        = build_competitor_table_html(raw_fin, company_name)
+    news_html        = build_news_html(news_items)
+    trader_scorecard = build_trader_scorecard(raw_fin)
 
     # Status line
     fin_status = f"📈 {ticker} (public)" if is_public and ticker else "🔒 private company"
     err_note = f" · ⚠️ {len(errors)} warning(s)" if errors else ""
     status = f"✅ Analyzed **{pages} pages** · {fin_status}{err_note}"
 
-    # Extract sections from report
-    competition_md = _extract_section(report, "3. Competitive Landscape")
-    news_md        = _extract_section(report, "4. Recent News & Strategic Developments")
-
     # Company header
-    company_header = f"# {company_name} — Intelligence Report"
+    company_header = f"# {company_name} — Full AI Report"
 
     # Save download
     download_path = _save_report(report, company_name) if report else None
@@ -883,8 +1091,8 @@ def analyze_company(url: str, groq_api_key: str, progress=gr.Progress(track_tqdm
         health_html,      # 7
         comp_html,        # 8
         news_html,        # 9
-        competition_md,   # 10
-        news_md,          # 11
+        trader_scorecard, # 10
+        report,           # 11  ← full LLM report
         download_path,    # 12
     )
 
@@ -1046,27 +1254,37 @@ with gr.Blocks(css=CSS, title="ScoutAI — Smart Company Analyst Agent") as demo
     company_header_md = gr.Markdown(value="", elem_id="company-header")
     status_md = gr.Markdown(value="", elem_id="status-bar")
 
-    # ── Five tabs ──────────────────────────────────────────────────────────
-    with gr.Tabs():
+    # ── Single-page Full AI Report ─────────────────────────────────────────
+    # Row 1: 12 metric cards
+    metrics_html_out = gr.HTML(value="")
 
-        # TAB 1 — Financial Dashboard
-        with gr.Tab("📈 Financial Dashboard"):
-            metrics_html_out = gr.HTML(value="")
-            stock_plot       = gr.Plot(label="", show_label=False)
-            revenue_plot     = gr.Plot(label="", show_label=False)
-            trends_plot      = gr.Plot(label="", show_label=False)   # FCF chart
-            margin_plot      = gr.Plot(label="", show_label=False)   # Margin expansion
-            health_html_out  = gr.HTML(value="")                     # Balance sheet health
-            comp_html_out    = gr.HTML(value="")                     # Competitor table
-            news_html_out    = gr.HTML(value="")
+    # Row 2: Stock chart + Revenue chart side by side
+    with gr.Row():
+        stock_plot   = gr.Plot(label="", show_label=False)
+        revenue_plot = gr.Plot(label="", show_label=False)
 
-        # TAB 2 — Competitive Landscape
-        with gr.Tab("⚔️ Competitive Landscape"):
-            competition_md = gr.Markdown(elem_classes="tab-content")
+    # Row 3: FCF chart + Margin expansion chart side by side
+    with gr.Row():
+        trends_plot = gr.Plot(label="", show_label=False)
+        margin_plot = gr.Plot(label="", show_label=False)
 
-        # TAB 3 — News & Developments
-        with gr.Tab("📰 News & Developments"):
-            news_md = gr.Markdown(elem_classes="tab-content")
+    # Trader Scorecard (signal chips + key trade metrics)
+    trader_scorecard_out = gr.HTML(value="")
+
+    # Balance sheet health + competitor table
+    health_html_out = gr.HTML(value="")
+    comp_html_out   = gr.HTML(value="")
+
+    # News cards
+    news_html_out = gr.HTML(value="")
+
+    # Full LLM report
+    gr.HTML(
+        "<div style='margin:24px 0 8px;padding-bottom:10px;border-bottom:2px solid #334155'>"
+        "<span style='font-size:15px;font-weight:700;color:#F1F5F9'>📄 Full AI Intelligence Report</span>"
+        "</div>"
+    )
+    full_report_md = gr.Markdown(value="", elem_classes="tab-content")
 
     # ── Download ───────────────────────────────────────────────────────────
     with gr.Row():
@@ -1134,9 +1352,9 @@ with gr.Blocks(css=CSS, title="ScoutAI — Smart Company Analyst Agent") as demo
         margin_plot,         # 6  Margin expansion
         health_html_out,     # 7  Balance sheet health
         comp_html_out,       # 8  Competitor table
-        news_html_out,       # 9  Recent news cards
-        competition_md,      # 10
-        news_md,             # 11
+        news_html_out,       # 9  News cards
+        trader_scorecard_out,# 10 Trader scorecard
+        full_report_md,      # 11 Full LLM report
         download_btn,        # 12
     ]
 

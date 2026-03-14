@@ -319,6 +319,17 @@ def build_raw_data(ticker: str, qs: dict) -> dict:
         "analyst_recommendation": _safe(fd, "recommendationKey"),
         "beta":                   _safe(sd, "beta"),
         "dividend_yield":         _pct(_safe(sd, "dividendYield", "raw")),
+        # Trader-specific fields
+        "peg_ratio":              _safe(ks, "pegRatio"),
+        "price_to_book":          _safe(ks, "priceToBook"),
+        "short_ratio":            _safe(ks, "shortRatio"),
+        "week52_change":          _pct(_safe(ks, "52WeekChange", "raw")),
+        "target_high":            _safe(fd, "targetHighPrice"),
+        "target_low":             _safe(fd, "targetLowPrice"),
+        "analyst_count":          _safe(fd, "numberOfAnalystOpinions", "raw"),
+        "payout_ratio":           _pct(_safe(sd, "payoutRatio", "raw")),
+        "shares_outstanding":     _safe(ks, "sharesOutstanding", "fmt"),
+        "fcf_raw":                _safe(fd, "freeCashflow", "raw"),
     }
 
 
