@@ -26,6 +26,8 @@ Rules:
 - Year-over-year (YoY) comparisons must use specific years (e.g. 2023 vs 2024), not vague language.
 - Each section must be dense with information — no fluff, no filler sentences.
 - Tone: professional, analytical, like a Goldman Sachs equity research note.
+- Financial data may come from Yahoo Finance (live market data) or SEC EDGAR (official 10-K filings).
+  Treat both sources as reliable; prefer EDGAR numbers for historical revenue/income accuracy.
 """
 
 REPORT_TEMPLATE = """
@@ -91,7 +93,7 @@ Start the report with ONLY this header (no preamble):
 
 End with:
 ---
-*CompanyRadar — AI Business Intelligence*
+*ScoutAI — Smart Company Analyst Agent*
 """
 
 

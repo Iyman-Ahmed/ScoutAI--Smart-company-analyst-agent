@@ -76,27 +76,15 @@ def _yf_get(url: str, retries: int = 3, delay: float = 2.0):
 
 # ─── Ticker Detection ────────────────────────────────────────────────────────
 
-KNOWN_TICKERS = {
-    "apple": "AAPL", "microsoft": "MSFT", "google": "GOOGL", "alphabet": "GOOGL",
-    "amazon": "AMZN", "meta": "META", "facebook": "META", "netflix": "NFLX",
-    "tesla": "TSLA", "nvidia": "NVDA", "openai": None, "stripe": None,
-    "figma": None, "notion": None, "databricks": None, "anthropic": None,
-    "shopify": "SHOP", "salesforce": "CRM", "oracle": "ORCL", "sap": "SAP",
-    "adobe": "ADBE", "zoom": "ZM", "uber": "UBER", "lyft": "LYFT",
-    "airbnb": "ABNB", "doordash": "DASH", "snowflake": "SNOW",
-    "palantir": "PLTR", "coinbase": "COIN", "robinhood": "HOOD",
-    "paypal": "PYPL", "block": "SQ", "intuit": "INTU",
-    "servicenow": "NOW", "workday": "WDAY", "hubspot": "HUBS",
-    "twilio": "TWLO", "okta": "OKTA", "crowdstrike": "CRWD",
-    "datadog": "DDOG", "mongodb": "MDB", "atlassian": "TEAM",
-    "intel": "INTC", "amd": "AMD", "qualcomm": "QCOM", "arm": "ARM",
-    "ibm": "IBM", "cisco": "CSCO", "hp": "HPQ", "dell": "DELL",
-    "visa": "V", "mastercard": "MA", "jpmorgan": "JPM", "goldman": "GS",
-    "walmart": "WMT", "target": "TGT", "costco": "COST",
-    "disney": "DIS", "spotify": "SPOT", "archer": "ACHR",
-    "rivian": "RIVN", "lucid": "LCID", "joby": "JOBY",
-    "palo alto": "PANW", "fortinet": "FTNT", "zscaler": "ZS",
-    "asana": "ASAN", "github": None, "slack": None,
+# Only companies we KNOW are private — everything else goes through dynamic lookup.
+# This avoids false "not public" results and keeps the code independent of any list.
+KNOWN_PRIVATE: set = {
+    "openai", "stripe", "figma", "notion", "databricks", "anthropic",
+    "github", "slack", "canva", "epic games", "spacex", "klarna",
+    "linkedin", "indeed", "bamboohr", "rippling", "gusto", "fidelity",
+    "mixpanel", "segment", "linode", "vultr", "darktrace",
+    "bytedance", "tiktok", "shein", "revolut", "chime", "plaid",
+    "instacart", "reddit", "discord", "telegram", "signal",
 }
 
 
@@ -135,14 +123,138 @@ def _ddg_ticker_search(company_name: str) -> Optional[str]:
     return None
 
 
+_CORP_SUFFIXES = (
+    " inc", " inc.", " corp", " corp.", " corporation", " ltd", " ltd.",
+    " llc", " co.", " co,", " plc", " group", " holdings", " holding",
+    " technologies", " technology", " solutions", " services", " systems",
+    " international", " global", " limited", " ventures",
+)
+
+
+def _name_score(query: str, result_name: str) -> float:
+    """
+    Score 0–1 how well a YF result name matches the query.
+    Uses multi-level matching so obscure / short company names work reliably.
+    """
+    q = query.lower().strip()
+    r = result_name.lower().strip()
+
+    # Strip corporate suffixes from result for cleaner matching
+    r_clean = r
+    for sfx in _CORP_SUFFIXES:
+        r_clean = r_clean.replace(sfx, "")
+    r_clean = r_clean.strip()
+
+    if not q or not r_clean:
+        return 0.0
+
+    # Exact match
+    if q == r_clean:
+        return 1.0
+    # Result starts with query (e.g. "upwork" → "upwork inc")
+    if r_clean.startswith(q):
+        return 0.95
+    # Query contained in result
+    if q in r_clean:
+        return 0.90
+    # Result contained in query (short tickers / acronyms)
+    if r_clean in q:
+        return 0.85
+
+    # Word-level: how many meaningful query words appear in result
+    q_words = [w for w in q.split() if len(w) > 2]
+    if not q_words:
+        return 0.5 if q[:3] in r_clean else 0.0
+    matched = sum(1 for w in q_words if w in r_clean)
+    return matched / len(q_words)
+
+
+def _yf_search_ticker(company_name: str) -> Optional[str]:
+    """
+    Universal ticker finder via Yahoo Finance's autocomplete API.
+    Works for any publicly traded company worldwide — no hardcoded list needed.
+    """
+    try:
+        s = _get_session()
+        query = company_name.replace(" ", "+")
+        r = s.get(
+            f"https://query2.finance.yahoo.com/v1/finance/search"
+            f"?q={query}&lang=en-US&region=US&quotesCount=8&newsCount=0",
+            timeout=8,
+        )
+        if r.status_code != 200:
+            return None
+
+        quotes = r.json().get("quotes", [])
+        best_ticker: Optional[str] = None
+        best_score: float = 0.0
+
+        for q in quotes:
+            # Only equities (skip funds, futures, crypto, forex)
+            if q.get("quoteType") not in ("EQUITY",):
+                continue
+            ticker = q.get("symbol", "")
+            if not ticker or len(ticker) > 6:
+                continue
+            # Skip complex instruments: warrants (ends in W), units (U), rights
+            if ticker.endswith(("W", ".WS", ".RT", ".U")):
+                continue
+
+            result_name = q.get("shortname") or q.get("longname") or ""
+            score = _name_score(company_name, result_name)
+
+            logger.debug(f"  YF candidate: {ticker} | '{result_name}' | score={score:.2f}")
+
+            if score > best_score:
+                best_score = score
+                best_ticker = ticker
+
+        # Accept if there's a confident match
+        if best_ticker and best_score >= 0.5:
+            if _validate_ticker(best_ticker):
+                logger.info(f"YF search → '{best_ticker}' for '{company_name}' (score={best_score:.2f})")
+                return best_ticker
+
+        # Lower threshold when YF returns very few results (less ambiguity)
+        if best_ticker and best_score >= 0.3 and len(quotes) <= 3:
+            if _validate_ticker(best_ticker):
+                logger.info(f"YF search (low-conf) → '{best_ticker}' for '{company_name}' (score={best_score:.2f})")
+                return best_ticker
+
+    except Exception as e:
+        logger.debug(f"YF search ticker failed: {e}")
+    return None
+
+
 def find_ticker(company_name: str) -> Optional[str]:
+    """
+    Universal ticker resolution. Works for any company without a hardcoded list.
+
+    Priority:
+    1. Known-private set  → return None immediately
+    2. Direct ticker input (all-caps, 1–5 chars)
+    3. Yahoo Finance search API  → handles any public company worldwide
+    4. DDG text search (last resort)
+    """
     name_lower = company_name.lower().strip()
-    for key, ticker in KNOWN_TICKERS.items():
-        if key in name_lower or name_lower in key:
-            return ticker  # None means known-private
-    if company_name.isupper() and len(company_name) <= 5:
+
+    # 1. Known-private companies — skip all lookups
+    for priv in KNOWN_PRIVATE:
+        if priv in name_lower or name_lower == priv:
+            logger.info(f"'{company_name}' is known-private, skipping ticker lookup")
+            return None
+
+    # 2. User typed a ticker directly (e.g. "AAPL", "UPWK")
+    if re.match(r'^[A-Z]{1,5}$', company_name):
         if _validate_ticker(company_name):
             return company_name
+
+    # 3. Yahoo Finance search — primary, universal
+    yf_result = _yf_search_ticker(company_name)
+    if yf_result:
+        return yf_result
+
+    # 4. DDG fallback
     return _ddg_ticker_search(company_name)
 
 
@@ -822,30 +934,93 @@ def fetch_recent_news(company_name: str, ticker: Optional[str] = None) -> list:
     return items[:10]
 
 
+# ─── EDGAR merge helper ───────────────────────────────────────────────────────
+
+def _merge_annual(yf_annual: dict, edgar_annual: dict) -> dict:
+    """
+    Merge Yahoo Finance annual data with SEC EDGAR annual data.
+    EDGAR is authoritative for historical revenue/net_income (official SEC filings).
+    YF fills in TTM margins and D/E ratio.
+    """
+    if not edgar_annual:
+        return yf_annual
+    if not yf_annual or not yf_annual.get("years"):
+        return edgar_annual
+
+    # Prefer whichever source has more years of data
+    yf_years  = len(yf_annual.get("years", []))
+    edg_years = len(edgar_annual.get("years", []))
+
+    if edg_years >= yf_years:
+        merged = dict(edgar_annual)
+        # Supplement YF TTM values where EDGAR has None
+        for key in ("gross_margin", "operating_margin", "d_e_ratio", "current_ratio"):
+            yf_vals = yf_annual.get(key, [])
+            edg_vals = merged.get(key, [])
+            if yf_vals and all(v is None for v in edg_vals):
+                merged[key] = yf_vals
+        return merged
+    else:
+        return yf_annual
+
+
 # ─── Main Entry Point ─────────────────────────────────────────────────────────
 
 def get_financial_data(company_name: str) -> dict:
+    """
+    Fetch financial data for any company.
+
+    Sources (run concurrently):
+    1. Yahoo Finance  — market price, valuation multiples, TTM metrics, stock history
+    2. SEC EDGAR      — official annual revenue/net income from 10-K filings (US companies)
+
+    EDGAR works purely by company name — no ticker required.
+    If YF ticker lookup fails but EDGAR finds the company, we still return rich data.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    from agents.sec_edgar import get_edgar_data
+
     if not company_name:
         return {"is_public": False, "combined_text": "No company name provided.", "news_items": []}
 
-    ticker = find_ticker(company_name)
-    logger.info(f"Ticker for '{company_name}': {ticker}")
+    # ── Run YF ticker lookup + EDGAR search concurrently ───────────────────
+    with ThreadPoolExecutor(max_workers=2) as ex:
+        ticker_future = ex.submit(find_ticker, company_name)
+        edgar_future  = ex.submit(get_edgar_data, company_name)
 
+    ticker       = ticker_future.result()
+    edgar_annual = edgar_future.result()
+
+    # If YF couldn't find a ticker but EDGAR has one, use it
+    if not ticker and edgar_annual.get("edgar_ticker"):
+        candidate = edgar_annual["edgar_ticker"]
+        if _validate_ticker(candidate):
+            ticker = candidate
+            logger.info(f"Ticker resolved via EDGAR: {ticker}")
+
+    logger.info(f"Ticker='{ticker}' | EDGAR='{edgar_annual.get('edgar_name', 'not found')}'")
+
+    # ── Case A: public company (have ticker) ───────────────────────────────
     if ticker:
-        qs        = fetch_quote_summary(ticker)
+        qs         = fetch_quote_summary(ticker)
         time.sleep(0.4)
-        hist      = fetch_stock_history(ticker)
+        hist       = fetch_stock_history(ticker)
         time.sleep(0.4)
-        quarterly = fetch_quarterly_financials(ticker)
+        quarterly  = fetch_quarterly_financials(ticker)
         time.sleep(0.3)
-        annual    = fetch_annual_financials(ticker)
+        yf_annual  = fetch_annual_financials(ticker)
         time.sleep(0.3)
         news_items = fetch_recent_news(company_name, ticker)
 
         raw_data  = build_raw_data(ticker, qs) if qs else {"ticker": ticker}
-        formatted = format_public_data(raw_data) if qs else f"Ticker: {ticker}. Metrics temporarily unavailable."
+        formatted = format_public_data(raw_data) if qs else (
+            f"Ticker: {ticker}. Metrics temporarily unavailable."
+        )
 
-        # Competitor detection (runs last — slowest due to DDG + validation)
+        # Merge YF + EDGAR annual data — EDGAR wins on historical depth
+        annual = _merge_annual(yf_annual, edgar_annual)
+
+        # Competitor detection
         sector      = raw_data.get("sector", "")
         industry    = raw_data.get("industry", "")
         competitors = find_and_fetch_competitors(company_name, ticker, sector, industry)
@@ -853,6 +1028,7 @@ def get_financial_data(company_name: str) -> dict:
         logger.info(
             f"Financial data: qs={bool(qs)}, hist={bool(hist)}, "
             f"quarterly={bool(quarterly)}, annual_years={len(annual.get('years', []))}, "
+            f"edgar_years={len(edgar_annual.get('years', []))}, "
             f"news={len(news_items)}, competitors={len(competitors)}"
         )
         return {
@@ -867,6 +1043,35 @@ def get_financial_data(company_name: str) -> dict:
             "competitors":   competitors,
         }
 
+    # ── Case B: EDGAR-only (US public, but YF ticker lookup failed) ────────
+    if edgar_annual.get("years"):
+        news_items = fetch_recent_news(company_name)
+        edgar_name = edgar_annual.get("edgar_name", company_name)
+        rev_latest = edgar_annual["revenue"][-1] if edgar_annual.get("revenue") else None
+        ni_latest  = edgar_annual["net_income"][-1] if edgar_annual.get("net_income") else None
+        summary = (
+            f"**{edgar_name}** (SEC EDGAR — US public company)\n\n"
+            f"**Annual Revenue ({edgar_annual['years'][-1]}):** "
+            f"${rev_latest:.2f}B\n" if rev_latest else ""
+            f"**Net Income ({edgar_annual['years'][-1]}):** "
+            f"${ni_latest:.2f}B\n" if ni_latest else ""
+            f"**Revenue CAGR ({edgar_annual['years'][0]}–{edgar_annual['years'][-1]}):** "
+            f"{edgar_annual.get('revenue_cagr', 'N/A')}%\n"
+            f"\n*Note: Real-time price and valuation data unavailable — YF ticker not resolved.*"
+        )
+        return {
+            "is_public":     True,
+            "ticker":        edgar_annual.get("edgar_ticker") or None,
+            "raw_data":      {"ticker": edgar_annual.get("edgar_ticker", ""), "company_name": edgar_name},
+            "stock_history": None,
+            "quarterly":     {},
+            "annual":        edgar_annual,
+            "combined_text": summary,
+            "news_items":    news_items,
+            "competitors":   [],
+        }
+
+    # ── Case C: private / non-US, no financial data found ─────────────────
     news_items = fetch_recent_news(company_name)
     return {
         "is_public":     False,

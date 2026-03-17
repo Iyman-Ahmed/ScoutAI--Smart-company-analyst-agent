@@ -32,7 +32,7 @@ All output lives on **one scrollable Full AI Report page**, organized as:
                           EV · EV/EBITDA · P/S · Rev Growth · ROE · Gross & Op Margin
 
 📈 Stock Chart            1-year price history with 52W high/low annotations
-📊 Revenue & Net Income   Up to 4 years annual data with CAGR badge
+📊 Revenue & Net Income   Up to 10 years annual data (from SEC EDGAR) with CAGR badge
 💰 Cash Flow Chart        Operating CF + Free Cash Flow (annual trend)
 📉 Margin Expansion       Gross / Operating / Net margin over time
 
@@ -41,13 +41,13 @@ All output lives on **one scrollable Full AI Report page**, organized as:
 
 🏦 Balance Sheet Health   D/E Ratio · Current Ratio · FCF · Cash · Debt
 ⚔️  Competitor Table       Side-by-side metrics vs up to 3 sector peers
-📰 News Feed              Live recent headlines from Yahoo Finance
+📰 News Feed              Live recent headlines from Yahoo Finance + DuckDuckGo
 
 📄 Full AI Report         LLM-written structured intelligence report
 ⬇  Download               Export full report as Markdown
 ```
 
-> Private companies receive graceful fallback notices wherever public data is unavailable.
+> Private companies and non-US companies receive graceful fallback handling — the AI report still runs using web-scraped and DuckDuckGo data.
 
 ---
 
@@ -74,8 +74,6 @@ Built for traders and investors who need fast, signal-driven data before taking 
 
 ## Agent Architecture
 
-See [agents.md](agents.md) for a detailed flowchart of each agent's responsibilities.
-
 ```
 User Input (URL)
       │
@@ -85,24 +83,37 @@ User Input (URL)
 └─────────────────────────┘
       │
       ▼
-┌──────────────────────────────────────────────────────────┐
-│                  Parallel Data Gathering                  │
-│                                                          │
-│  🕷  Web Scraper Agent                                   │
-│      Crawls up to 12 pages · BeautifulSoup + Playwright  │
-│      Extracts: description, leadership, products,        │
-│      pricing, news, about, careers                       │
-│                                                          │
-│  🌐  External Research Agent                             │
-│      6 DuckDuckGo queries (no API key needed)            │
-│      Covers: overview · news · funding · competitors     │
-│               reviews · LinkedIn / team size             │
-│                                                          │
-│  📊  Financial Analyst Agent                             │
-│      Yahoo Finance via Chrome impersonation              │
-│      Fetches: stock · P&L · cash flow · balance sheet    │
-│               trader metrics · competitors · news        │
-└──────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                    Parallel Data Gathering                    │
+│                                                              │
+│  🕷  Web Scraper Agent                                       │
+│      curl_cffi Chrome impersonation (bypasses Cloudflare)    │
+│      Playwright fallback for JS-heavy / captcha sites        │
+│      Crawls up to 12 pages · extracts description,          │
+│      leadership, products, pricing, news, about, careers     │
+│                                                              │
+│  🌐  External Research Agent                                 │
+│      6 DuckDuckGo queries (no API key needed)                │
+│      Covers: overview · news · funding · competitors         │
+│               reviews · LinkedIn / team size                 │
+│                                                              │
+│  📊  Financial Analyst Agent  ──────────────────────────┐   │
+│      Two sub-sources run concurrently:                   │   │
+│                                                          │   │
+│      📈 Yahoo Finance (Chrome impersonation)             │   │
+│         Stock price · P/E · Margins · TTM metrics        │   │
+│         Valuation multiples · Trader signals             │   │
+│         Works for any globally listed company            │   │
+│                                                          │   │
+│      🏛  SEC EDGAR (official SEC filings — free)         │   │
+│         Searches ~12,000 companies by name (no ticker)   │   │
+│         10-K annual revenue · net income · margins       │   │
+│         Historical data going back 10+ years             │   │
+│         Works for any SEC-registered US company          │   │
+│      ──────────────────────────────────────────────────  │   │
+│      Results merged: EDGAR for history + YF for live     │   │
+│                                                     ─────┘   │
+└──────────────────────────────────────────────────────────────┘
       │
       ▼
 ┌─────────────────────────┐
@@ -118,8 +129,28 @@ User Input (URL)
 **Orchestration:** LangGraph StateGraph
 **LLM:** Groq — `llama-3.3-70b-versatile` *(completely free)*
 **Web Research:** DuckDuckGo Search *(no API key needed)*
-**Financial Data:** Yahoo Finance via `curl-cffi` Chrome impersonation *(no API key needed)*
-**Web Scraping:** BeautifulSoup + requests + Playwright fallback
+**Financial Data:** Yahoo Finance + SEC EDGAR *(both free, no API key)*
+**Web Scraping:** curl_cffi Chrome impersonation + Playwright fallback
+
+---
+
+## Universal Company Coverage
+
+ScoutAI works for **any company** — not just a predefined list.
+
+| Type | How it works |
+|---|---|
+| **Any US public company** | SEC EDGAR name search → 10-K annual filings (revenue, net income, margins) |
+| **Any globally listed company** | Yahoo Finance autocomplete API → ticker → full market data |
+| **Small/mid-cap companies** | Same pipeline — Upwork, Fiverr, Duolingo, Monday.com, etc. all work |
+| **Private companies** | Web scraper + DuckDuckGo research + LLM report (no financial charts) |
+| **Cloudflare/captcha websites** | curl_cffi Chrome TLS impersonation + Playwright headless browser fallback |
+
+**Ticker resolution priority:**
+1. Known-private shortlist (OpenAI, Stripe, etc.) — skip lookup immediately
+2. Yahoo Finance autocomplete API — fast, works for any exchange worldwide
+3. SEC EDGAR company list — cross-reference for US companies
+4. DuckDuckGo text search — last resort
 
 ---
 
@@ -133,21 +164,21 @@ Wikipedia overview · CEO & founders · Recent news (2025–2026) · Funding rou
 ARR/revenue estimates · Competitor landscape · G2/Glassdoor reviews · LinkedIn employee count ·
 Headquarters & founding year
 
-### Financial Analyst (public companies only)
+### Financial Analyst (public companies)
 
-| Category | Fields |
-|---|---|
-| **Valuation** | Market Cap · P/E · Forward P/E · Enterprise Value · EV/EBITDA · P/S · P/B · PEG Ratio |
-| **Profitability** | Revenue TTM · Net Income · EBITDA · Gross Margin · Operating Margin · Net Margin · ROE |
-| **Per Share** | EPS TTM · EPS Forward · Shares Outstanding |
-| **Cash Flow** | Free Cash Flow · Operating Cash Flow · Annual FCF trend |
-| **Annual Trends** | Revenue · Net Income · EBITDA · Gross Profit (up to 4 years + CAGR) |
-| **Balance Sheet** | Total Debt · Cash & Equivalents · Debt/Equity Ratio · Current Ratio |
-| **Stock** | Current Price · 52W High/Low · 52W Return % · Beta · Dividend Yield · Payout Ratio |
-| **Analyst** | Target Price (high/mean/low) · Recommendation · Analyst Count |
-| **Trader Signals** | Short Ratio · Upside to Target % · PEG Signal · Overall Trade Signal |
-| **Competitors** | Up to 3 sector peers — Market Cap · Revenue · Margins · P/E · ROE |
-| **News** | Live headlines from Yahoo Finance |
+| Category | Fields | Source |
+|---|---|---|
+| **Valuation** | Market Cap · P/E · Forward P/E · Enterprise Value · EV/EBITDA · P/S · P/B · PEG Ratio | Yahoo Finance |
+| **Profitability** | Revenue TTM · Net Income · EBITDA · Gross Margin · Operating Margin · Net Margin · ROE | Yahoo Finance |
+| **Per Share** | EPS TTM · EPS Forward · Shares Outstanding | Yahoo Finance |
+| **Cash Flow** | Free Cash Flow · Operating Cash Flow | Yahoo Finance |
+| **Annual Trends** | Revenue · Net Income · Net Margin (up to 10 years + CAGR) | **SEC EDGAR** (primary) |
+| **Balance Sheet** | Total Debt · Cash & Equivalents · D/E Ratio · Current Ratio | Yahoo Finance |
+| **Stock** | Price · 52W High/Low · 52W Return % · Beta · Dividend Yield · Payout Ratio | Yahoo Finance |
+| **Analyst** | Target Price (high/mean/low) · Recommendation · Analyst Count | Yahoo Finance |
+| **Trader Signals** | Short Ratio · Upside to Target % · PEG Signal · Overall Signal | Yahoo Finance |
+| **Competitors** | Up to 3 sector peers — Market Cap · Revenue · Margins · P/E · ROE | Yahoo Finance |
+| **News** | Live headlines | Yahoo Finance + DuckDuckGo |
 
 ---
 
@@ -179,7 +210,7 @@ source venv/bin/activate          # Windows: venv\Scripts\activate
 # 3. Install dependencies
 pip install -r requirements.txt
 
-# 4. (Optional) Install Playwright for JS-heavy websites
+# 4. (Optional) Install Playwright for JS-heavy / captcha-protected websites
 playwright install chromium
 
 # 5. Set your Groq API key
@@ -198,10 +229,11 @@ python app.py
 |---|---|---|
 | LLM | Groq `llama-3.3-70b-versatile` | Free |
 | Agent orchestration | LangGraph StateGraph | Free |
-| Web scraping | BeautifulSoup4 + requests | Free |
-| JS rendering | Playwright (optional fallback) | Free |
+| Web scraping | curl_cffi Chrome impersonation + BeautifulSoup4 | Free |
+| JS / captcha bypass | Playwright (optional fallback) | Free |
 | Web research | DuckDuckGo Search | Free |
-| Financial data | Yahoo Finance + curl-cffi | Free |
+| Financial data (live) | Yahoo Finance via curl_cffi | Free |
+| Financial data (historical) | SEC EDGAR XBRL API | Free |
 | UI | Gradio 5.x | Free |
 | Charts | Matplotlib | Free |
 
@@ -215,20 +247,20 @@ python app.py
 |---|---|
 | **Traders & Investors** | Pre-trade due diligence — signals, valuation, short interest, analyst consensus |
 | **Sales Teams** | Deep prospect research before outreach calls |
-| **Founders** | Analyze competitors in minutes |
+| **Founders** | Analyze any competitor in minutes — even small ones |
 | **Job Seekers** | Understand a company's financials and culture before interviews |
-| **Analysts** | Fast competitive market intelligence |
+| **Analysts** | Fast competitive market intelligence with 10+ years of official data |
 | **Journalists** | Rapid company background research |
 
 ---
 
 ## Limitations
 
-- Some websites block automated scrapers (Cloudflare-protected sites may return limited data)
-- Financial charts and trader metrics are only available for **publicly traded companies**
-- Private company financials are estimates sourced from web searches
+- Balance sheet health and trader metrics require a Yahoo Finance listing (some non-US companies may have limited data)
+- Private company financials are estimates sourced from web searches (no charts)
+- SEC EDGAR covers US-registered companies only; international companies use Yahoo Finance only
+- Some websites may still block scraping even with Chrome impersonation (very aggressive WAFs)
 - Report quality scales with the amount of publicly available information
-- Yahoo Finance data is subject to their availability and rate limits
 
 ---
 
@@ -237,7 +269,7 @@ python app.py
 - No API keys are stored in code or committed to this repository
 - The Groq API key is passed at runtime via environment variable (`GROQ_API_KEY`)
 - On HuggingFace Spaces, the key is stored as a **Space secret** (never visible to users)
-- All financial data is fetched read-only from public sources
+- All financial data is fetched read-only from public sources (Yahoo Finance, SEC EDGAR)
 
 ---
 
@@ -249,4 +281,4 @@ MIT License — see [LICENSE](LICENSE) for details.
 
 *Developed by [Iyman Ahmed](https://iymanahmed.tech) &nbsp;·&nbsp; [GitHub](https://github.com/Iyman-Ahmed/ScoutAI--Smart-company-analyst-agent) &nbsp;·&nbsp; [iyman12393@gmail.com](mailto:iyman12393@gmail.com)*
 
-*Built with LangGraph · Groq · DuckDuckGo · Yahoo Finance · Gradio*
+*Built with LangGraph · Groq · DuckDuckGo · Yahoo Finance · SEC EDGAR · Gradio*

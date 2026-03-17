@@ -533,8 +533,7 @@ def build_health_html(raw_financial: dict) -> str:
             "padding-bottom:8px;border-bottom:2px solid #334155'>🏦 Balance Sheet Health</h3>"
             "<div style='padding:14px 16px;background:#2D1B00;border-left:4px solid #F97316;"
             "border-radius:6px;font-size:13px;color:#FED7AA'>"
-            "🔒 Balance sheet data is not publicly available. "
-            "This company is private or has not yet filed public financial statements."
+            "🔒 Balance sheet data unavailable — private company or non-US listing."
             "</div></div>"
         )
 
@@ -1067,8 +1066,16 @@ def analyze_company(url: str, groq_api_key: str, progress=gr.Progress(track_tqdm
     news_html        = build_news_html(news_items)
     trader_scorecard = build_trader_scorecard(raw_fin)
 
-    # Status line
-    fin_status = f"📈 {ticker} (public)" if is_public and ticker else "🔒 private company"
+    # Status line — show data source clearly
+    annual_source = raw_fin.get("annual", {}).get("source", "")
+    if is_public and ticker:
+        fin_status = f"📈 {ticker} · Yahoo Finance"
+        if annual_source == "SEC EDGAR":
+            fin_status += " + SEC EDGAR"
+    elif is_public and annual_source == "SEC EDGAR":
+        fin_status = "📋 SEC EDGAR (historical filings)"
+    else:
+        fin_status = "🔒 private company"
     err_note = f" · ⚠️ {len(errors)} warning(s)" if errors else ""
     status = f"✅ Analyzed **{pages} pages** · {fin_status}{err_note}"
 

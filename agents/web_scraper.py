@@ -10,7 +10,7 @@ import logging
 from urllib.parse import urljoin, urlparse
 from typing import Optional
 
-import requests
+from curl_cffi import requests as cffi_requests
 from bs4 import BeautifulSoup
 
 from config import (
@@ -23,15 +23,25 @@ from config import (
 
 logger = logging.getLogger(__name__)
 
+# curl_cffi handles real Chrome TLS fingerprint — no need to set headers manually
 HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/120.0.0.0 Safari/537.36"
-    ),
     "Accept-Language": "en-US,en;q=0.9",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 }
+
+# Keywords that indicate a captcha / bot-block page
+_BLOCK_SIGNALS = [
+    "captcha", "cf-challenge", "cloudflare", "access denied",
+    "robot", "are you human", "ddos-guard", "just a moment",
+    "enable javascript", "checking your browser", "ray id",
+    "please wait while we check", "security check",
+]
+
+
+def _is_blocked(text: str) -> bool:
+    """Return True if the response looks like a captcha or bot-block page."""
+    sample = text[:4000].lower()
+    return any(sig in sample for sig in _BLOCK_SIGNALS)
 
 # Tags to strip (noise)
 NOISE_TAGS = ["script", "style", "noscript", "svg", "img", "video",
@@ -86,11 +96,21 @@ def _clean_text(soup: BeautifulSoup) -> str:
     return raw[:MAX_CONTENT_LENGTH]
 
 
-def _fetch_page(url: str, session: requests.Session) -> Optional[dict]:
+def _fetch_page(url: str, session: cffi_requests.Session) -> Optional[dict]:
     try:
         resp = session.get(url, headers=HEADERS, timeout=REQUEST_TIMEOUT, allow_redirects=True)
         if resp.status_code != 200:
+            logger.warning(f"HTTP {resp.status_code} for {url}")
             return None
+        # Detect captcha / Cloudflare block
+        if _is_blocked(resp.text):
+            logger.warning(f"Bot-block detected at {url} — will try Playwright fallback")
+            html = _try_playwright_fallback(url)
+            if not html:
+                return None
+            soup = BeautifulSoup(html, "lxml")
+            title = soup.title.string.strip() if soup.title and soup.title.string else url
+            return {"url": url, "title": title, "content": _clean_text(soup)}
         soup = BeautifulSoup(resp.text, "lxml")
         title = soup.title.string.strip() if soup.title and soup.title.string else url
         text = _clean_text(soup)
@@ -151,7 +171,7 @@ def scrape_website(url: str) -> dict:
       - combined_text: all page text joined
     """
     url = _normalize_url(url)
-    session = requests.Session()
+    session = cffi_requests.Session(impersonate="chrome120")
     scraped = []
     visited = set()
 
@@ -219,7 +239,7 @@ def scrape_website(url: str) -> dict:
     }
 
 
-def _try_sitemap(base_url: str, session: requests.Session) -> list[str]:
+def _try_sitemap(base_url: str, session: cffi_requests.Session) -> list[str]:
     """Try common sitemap URLs to get more page links."""
     sitemap_urls = [
         f"{_get_base_domain(base_url)}/sitemap.xml",
