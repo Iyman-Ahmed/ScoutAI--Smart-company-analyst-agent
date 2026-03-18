@@ -7,7 +7,7 @@ sdk: gradio
 sdk_version: 5.29.0
 app_file: app.py
 pinned: false
-short_description: Type a company name or URL. Get a full intelligence report + dashboard.
+short_description: Name or URL → intelligence report + financial dashboard.
 ---
 
 # 🔍 ScoutAI — Smart Company Analyst Agent
