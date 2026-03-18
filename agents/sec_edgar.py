@@ -118,8 +118,10 @@ def search_company(company_name: str) -> Optional[dict]:
             best_item = item
 
     if best_item and best_score >= 0.5:
+        raw_cik = best_item.get("cik_str", "")
+        cik_str = str(raw_cik).lstrip("0") or str(raw_cik)
         result = {
-            "cik":    best_item.get("cik_str", "").lstrip("0") or best_item.get("cik_str", ""),
+            "cik":    cik_str,
             "ticker": best_item.get("ticker", ""),
             "title":  best_item.get("title", ""),
             "score":  best_score,

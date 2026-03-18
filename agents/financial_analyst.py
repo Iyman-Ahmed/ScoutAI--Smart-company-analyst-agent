@@ -977,19 +977,16 @@ def get_financial_data(company_name: str) -> dict:
     EDGAR works purely by company name — no ticker required.
     If YF ticker lookup fails but EDGAR finds the company, we still return rich data.
     """
-    from concurrent.futures import ThreadPoolExecutor
     from agents.sec_edgar import get_edgar_data
 
     if not company_name:
         return {"is_public": False, "combined_text": "No company name provided.", "news_items": []}
 
-    # ── Run YF ticker lookup + EDGAR search concurrently ───────────────────
-    with ThreadPoolExecutor(max_workers=2) as ex:
-        ticker_future = ex.submit(find_ticker, company_name)
-        edgar_future  = ex.submit(get_edgar_data, company_name)
-
-    ticker       = ticker_future.result()
-    edgar_annual = edgar_future.result()
+    # ── Sequential: YF ticker lookup first, then EDGAR ─────────────────────
+    # (Avoid nested ThreadPoolExecutor — this function is already called from
+    #  graph.py's parallel executor, and nesting causes curl_cffi session issues.)
+    ticker       = find_ticker(company_name)
+    edgar_annual = get_edgar_data(company_name)
 
     # If YF couldn't find a ticker but EDGAR has one, use it
     if not ticker and edgar_annual.get("edgar_ticker"):
@@ -1049,16 +1046,17 @@ def get_financial_data(company_name: str) -> dict:
         edgar_name = edgar_annual.get("edgar_name", company_name)
         rev_latest = edgar_annual["revenue"][-1] if edgar_annual.get("revenue") else None
         ni_latest  = edgar_annual["net_income"][-1] if edgar_annual.get("net_income") else None
-        summary = (
-            f"**{edgar_name}** (SEC EDGAR — US public company)\n\n"
-            f"**Annual Revenue ({edgar_annual['years'][-1]}):** "
-            f"${rev_latest:.2f}B\n" if rev_latest else ""
-            f"**Net Income ({edgar_annual['years'][-1]}):** "
-            f"${ni_latest:.2f}B\n" if ni_latest else ""
-            f"**Revenue CAGR ({edgar_annual['years'][0]}–{edgar_annual['years'][-1]}):** "
-            f"{edgar_annual.get('revenue_cagr', 'N/A')}%\n"
-            f"\n*Note: Real-time price and valuation data unavailable — YF ticker not resolved.*"
-        )
+        yr_last    = edgar_annual["years"][-1]
+        yr_first   = edgar_annual["years"][0]
+        cagr       = edgar_annual.get("revenue_cagr", "N/A")
+        parts = [f"**{edgar_name}** (SEC EDGAR — US public company)\n\n"]
+        if rev_latest is not None:
+            parts.append(f"**Annual Revenue ({yr_last}):** ${rev_latest:.2f}B\n")
+        if ni_latest is not None:
+            parts.append(f"**Net Income ({yr_last}):** ${ni_latest:.2f}B\n")
+        parts.append(f"**Revenue CAGR ({yr_first}–{yr_last}):** {cagr}%\n")
+        parts.append("\n*Note: Real-time price and valuation data unavailable — YF ticker not resolved.*")
+        summary = "".join(parts)
         return {
             "is_public":     True,
             "ticker":        edgar_annual.get("edgar_ticker") or None,
