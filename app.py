@@ -1250,7 +1250,7 @@ with gr.Blocks(css=CSS, title="ScoutAI — Smart Company Analyst Agent") as demo
     with gr.Row(elem_classes="input-row"):
         url_input = gr.Textbox(
             label="Company Name or Website URL",
-            placeholder="Nvidia   ·   Upwork   ·   https://shopify.com",
+            placeholder="Nvidia   ·   https://shopify.com",
             scale=5,
         )
         api_key_input = gr.Textbox(
