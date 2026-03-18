@@ -1220,9 +1220,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 TITLE_HTML = """
 <div id='title-html'>
   <h1>🔍 ScoutAI</h1>
-  <p>Smart company analyst agent &mdash; drop a URL &rarr; get a full intelligence report with live financial charts</p>
+  <p>Smart company analyst agent &mdash; type a company name <em>or</em> drop a URL &rarr; get a full intelligence report with live financial charts</p>
   <p style='color:#9CA3AF;font-size:0.78rem'>
-    Powered by Groq &middot; LangGraph &middot; Yahoo Finance &middot; DuckDuckGo
+    Powered by Groq &middot; LangGraph &middot; Yahoo Finance &middot; SEC EDGAR &middot; DuckDuckGo
   </p>
 </div>
 """

@@ -7,12 +7,12 @@ sdk: gradio
 sdk_version: 5.29.0
 app_file: app.py
 pinned: false
-short_description: Drop a URL. Get a full intelligence report + dashboard.
+short_description: Type a company name or URL. Get a full intelligence report + dashboard.
 ---
 
 # 🔍 ScoutAI — Smart Company Analyst Agent
 
-> **Drop any company URL. Get an investment-grade intelligence report with live financial charts in under 90 seconds.**
+> **Type any company name or paste a URL. Get an investment-grade intelligence report with live financial charts in under 90 seconds.**
 
 [![HuggingFace Space](https://img.shields.io/badge/🤗%20HuggingFace-Live%20Demo-yellow)](https://huggingface.co/spaces/Iyman-ahmed/ScoutAI-Smart-company-analyst-agent)
 [![GitHub](https://img.shields.io/badge/GitHub-Source%20Code-181717?logo=github)](https://github.com/Iyman-Ahmed/ScoutAI--Smart-company-analyst-agent)
@@ -23,7 +23,7 @@ short_description: Drop a URL. Get a full intelligence report + dashboard.
 
 ## What It Does
 
-ScoutAI is a **multi-agent AI system** that fully analyzes any company from a single website URL. Three specialized agents run in parallel — crawling the official site, researching the web, and pulling live financial data — before a Groq LLM synthesizes everything into a structured intelligence report.
+ScoutAI is a **multi-agent AI system** that fully analyzes any company from a company name or website URL. Three specialized agents run in parallel — crawling the official site, researching the web, and pulling live financial data — before a Groq LLM synthesizes everything into a structured intelligence report.
 
 All output lives on **one scrollable Full AI Report page**, organized as:
 
@@ -136,7 +136,15 @@ User Input (URL)
 
 ## Universal Company Coverage
 
-ScoutAI works for **any company** — not just a predefined list.
+ScoutAI works for **any company** — type the name or paste a URL, no hardcoded list required.
+
+**Input formats accepted:**
+```
+Nvidia                       ← plain company name
+Upwork                       ← works for small/mid-cap too
+https://shopify.com          ← full URL
+shopify.com                  ← bare domain
+```
 
 | Type | How it works |
 |---|---|
@@ -145,6 +153,7 @@ ScoutAI works for **any company** — not just a predefined list.
 | **Small/mid-cap companies** | Same pipeline — Upwork, Fiverr, Duolingo, Monday.com, etc. all work |
 | **Private companies** | Web scraper + DuckDuckGo research + LLM report (no financial charts) |
 | **Cloudflare/captcha websites** | curl_cffi Chrome TLS impersonation + Playwright headless browser fallback |
+| **No website available** | Financial data still fetched from Yahoo Finance + SEC EDGAR by company name |
 
 **Ticker resolution priority:**
 1. Known-private shortlist (OpenAI, Stripe, etc.) — skip lookup immediately
@@ -186,7 +195,7 @@ Headquarters & founding year
 
 ### On HuggingFace Spaces
 
-No setup required — just paste a company URL and click **Analyze**. The Groq API key is pre-configured as a Space secret.
+No setup required — type a company name or paste a URL and click **Analyze**. The Groq API key is pre-configured as a Space secret.
 
 [**→ Try it live on HuggingFace**](https://huggingface.co/spaces/Iyman-ahmed/ScoutAI-Smart-company-analyst-agent)
 
