@@ -992,11 +992,12 @@ def _save_report(report: str, company_name: str) -> str:
 
 
 def _validate_url(url: str):
+    """Accept either a website URL or a plain company name."""
     url = url.strip()
     if not url:
-        return "Please enter a website URL."
-    if not re.match(r"^(https?://)?([\w\-]+\.)+[\w]{2,}", url):
-        return "Please enter a valid website URL (e.g. https://stripe.com)."
+        return "Please enter a company name or website URL."
+    if len(url) < 2:
+        return "Input too short — please enter a company name or website URL."
     return None
 
 
@@ -1020,6 +1021,9 @@ def analyze_company(url: str, groq_api_key: str, progress=gr.Progress(track_tqdm
     if url_err:
         yield (f"**Error:** {url_err}",) + EMPTY[1:]
         return
+
+    # Store original input; graph.py will detect URL vs company name
+
 
     key = groq_api_key.strip() or os.getenv("GROQ_API_KEY", "")
     if not key:
@@ -1227,11 +1231,12 @@ TITLE_HTML = """
 _KEY_PRECONFIGURED = bool(os.getenv("GROQ_API_KEY", ""))
 
 EXAMPLES = [
-    ["https://apple.com",     ""],
-    ["https://nvidia.com",    ""],
+    ["Nvidia",                ""],
+    ["Upwork",                ""],
     ["https://shopify.com",   ""],
+    ["Duolingo",              ""],
     ["https://stripe.com",    ""],
-    ["https://openai.com",    ""],
+    ["OpenAI",                ""],
 ]
 
 
@@ -1244,8 +1249,8 @@ with gr.Blocks(css=CSS, title="ScoutAI — Smart Company Analyst Agent") as demo
     # ── Input row ──────────────────────────────────────────────────────────
     with gr.Row(elem_classes="input-row"):
         url_input = gr.Textbox(
-            label="Company Website URL",
-            placeholder="https://nvidia.com",
+            label="Company Name or Website URL",
+            placeholder="Nvidia   ·   Upwork   ·   https://shopify.com",
             scale=5,
         )
         api_key_input = gr.Textbox(

@@ -19,6 +19,7 @@ Defines the multi-agent pipeline as a state graph:
 
 import asyncio
 import logging
+import re
 from typing import TypedDict
 from urllib.parse import urlparse
 
@@ -59,27 +60,48 @@ class AgentState(TypedDict):
 
 # ─── Node: Extract Company Info ───────────────────────────────────────────────
 
+def _looks_like_url(text: str) -> bool:
+    """Return True if the input looks like a URL or domain, not a plain company name."""
+    t = text.strip().lower()
+    if t.startswith(("http://", "https://")):
+        return True
+    # Bare domain: contains a dot with a known TLD after it, no spaces
+    if " " not in t and re.search(r'\.[a-z]{2,6}(/|$)', t):
+        return True
+    return False
+
+
 def extract_company_info(state: AgentState) -> AgentState:
-    """Parse the URL to extract domain and a preliminary company name."""
-    url = state["url"].strip()
-    if not url.startswith(("http://", "https://")):
-        url = "https://" + url
-
-    parsed = urlparse(url)
-    domain = f"{parsed.scheme}://{parsed.netloc}"
-
-    # Guess company name from domain (e.g. stripe.com → Stripe)
-    netloc = parsed.netloc.replace("www.", "")
-    company_guess = netloc.split(".")[0].replace("-", " ").replace("_", " ").title()
-
+    """
+    Parse input — accepts either a website URL (https://nvidia.com)
+    or a plain company name (Nvidia, Upwork, Shopify).
+    """
+    raw = state["url"].strip()
     progress = state.get("progress", [])
-    progress.append(f"Analyzing URL: {url}")
+
+    if _looks_like_url(raw):
+        # ── URL / domain mode ──────────────────────────────────────────────
+        url = raw if raw.startswith(("http://", "https://")) else "https://" + raw
+        parsed = urlparse(url)
+        domain = f"{parsed.scheme}://{parsed.netloc}"
+        # Guess company name from domain (e.g. stripe.com → Stripe)
+        netloc = parsed.netloc.replace("www.", "")
+        company_name = netloc.split(".")[0].replace("-", " ").replace("_", " ").title()
+        progress.append(f"Analyzing URL: {url}")
+    else:
+        # ── Company name mode ──────────────────────────────────────────────
+        company_name = raw.title() if raw.islower() else raw
+        # Build a best-guess URL; web scraper will use DDG to find the real one
+        slug = re.sub(r'[^a-z0-9]', '', company_name.lower())
+        url = f"https://www.{slug}.com"
+        domain = url
+        progress.append(f"Company name input: {company_name}")
 
     return {
         **state,
         "url": url,
         "domain": domain,
-        "company_name": company_guess,
+        "company_name": company_name,
         "progress": progress,
     }
 

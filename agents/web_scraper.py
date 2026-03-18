@@ -162,9 +162,31 @@ def _try_playwright_fallback(url: str) -> Optional[str]:
         return None
 
 
+def _ddg_find_website(company_name: str) -> Optional[str]:
+    """Search DuckDuckGo to find a company's official website URL."""
+    try:
+        from duckduckgo_search import DDGS
+        ddgs = DDGS()
+        results = list(ddgs.text(f"{company_name} official website", max_results=5))
+        for r in results:
+            href = r.get("href", "")
+            # Skip news aggregators and social media
+            if href and not any(x in href for x in [
+                "wikipedia", "linkedin", "twitter", "facebook",
+                "instagram", "youtube", "crunchbase", "bloomberg",
+                "techcrunch", "wsj", "forbes", "reuters",
+            ]):
+                return href.split("?")[0].rstrip("/")
+    except Exception as e:
+        logger.debug(f"DDG website search failed: {e}")
+    return None
+
+
 def scrape_website(url: str) -> dict:
     """
     Main entry point for the web scraper agent.
+    Accepts either a real URL (https://nvidia.com) or a guessed slug URL
+    (https://www.nvidia.com) — will fall back to DDG search to find the real site.
     Returns a dict with:
       - company_name: guessed from title/meta
       - pages: list of {url, title, content}
@@ -181,7 +203,17 @@ def scrape_website(url: str) -> dict:
         # Try with trailing slash
         home_data = _fetch_page(url + "/", session)
     if not home_data:
-        return {"company_name": "", "pages": [], "combined_text": "Could not access the website."}
+        # Guessed URL didn't work — try to find the real website via DDG
+        # Extract company name from the guessed URL slug (www.COMPANY.com)
+        from urllib.parse import urlparse as _up
+        slug = _up(url).netloc.replace("www.", "").split(".")[0]
+        real_url = _ddg_find_website(slug)
+        if real_url:
+            logger.info(f"DDG found website for '{slug}': {real_url}")
+            url = real_url
+            home_data = _fetch_page(url, session)
+    if not home_data:
+        return {"company_name": "", "pages": [], "combined_text": "Could not access the website.", "pages_scraped": 0}
 
     scraped.append(home_data)
     visited.add(home_data["url"])
