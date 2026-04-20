@@ -27,7 +27,7 @@ _STATE: dict = {"session": None, "crumb": None}
 
 def _get_session() -> cffi_requests.Session:
     if _STATE["session"] is None:
-        _STATE["session"] = cffi_requests.Session(impersonate="chrome120")
+        _STATE["session"] = cffi_requests.Session(impersonate="chrome131")
         try:
             _STATE["session"].get("https://finance.yahoo.com/", timeout=8)
         except Exception:
@@ -105,7 +105,7 @@ def _validate_ticker(ticker: str) -> bool:
 
 def _ddg_ticker_search(company_name: str) -> Optional[str]:
     try:
-        ddgs = DDGS()
+        ddgs = DDGS(timeout=15)
         query = f'"{company_name}" stock ticker symbol NYSE NASDAQ'
         results = list(ddgs.text(query, max_results=6))
         for r in results:
@@ -759,7 +759,7 @@ def find_and_fetch_competitors(company_name: str, ticker: str, sector: str,
     # ── 3. DDG fallback: search → extract /quote/TICKER URL patterns ────────
     if len(competitors) < 2:
         try:
-            ddgs = DDGS()
+            ddgs = DDGS(timeout=15)
             query = f"{company_name} stock competitors peers {sector} publicly traded"
             results = list(ddgs.text(query, max_results=5))
             time.sleep(0.5)
@@ -787,7 +787,7 @@ def find_and_fetch_competitors(company_name: str, ticker: str, sector: str,
 
 def search_private_financials(company_name: str) -> str:
     try:
-        ddgs = DDGS()
+        ddgs = DDGS(timeout=15)
         queries = [
             f"{company_name} total funding raised valuation 2024 2025",
             f"{company_name} Crunchbase funding rounds investors ARR",
@@ -908,7 +908,7 @@ def fetch_recent_news(company_name: str, ticker: Optional[str] = None) -> list:
     # 3. DuckDuckGo news fallback
     if len(items) < 5:
         try:
-            ddgs = DDGS()
+            ddgs = DDGS(timeout=15)
             ddg_query = f"{company_name} company news deals partnerships 2025 2026"
             raw = list(ddgs.news(ddg_query, max_results=10))
             for r in raw:

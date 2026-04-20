@@ -166,7 +166,7 @@ def _ddg_find_website(company_name: str) -> Optional[str]:
     """Search DuckDuckGo to find a company's official website URL."""
     try:
         from duckduckgo_search import DDGS
-        ddgs = DDGS()
+        ddgs = DDGS(timeout=15)
         results = list(ddgs.text(f"{company_name} official website", max_results=5))
         for r in results:
             href = r.get("href", "")
@@ -193,7 +193,7 @@ def scrape_website(url: str) -> dict:
       - combined_text: all page text joined
     """
     url = _normalize_url(url)
-    session = cffi_requests.Session(impersonate="chrome120")
+    session = cffi_requests.Session(impersonate="chrome131")
     scraped = []
     visited = set()
 
