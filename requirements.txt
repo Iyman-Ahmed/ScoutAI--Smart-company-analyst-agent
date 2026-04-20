@@ -9,8 +9,8 @@ langgraph>=0.2.0
 beautifulsoup4>=4.12.0
 lxml>=5.2.0
 
-# External Research — pin to avoid breaking API changes
-duckduckgo-search>=6.3.0
+# External Research — duckduckgo-search was renamed to ddgs
+ddgs>=0.1.0
 
 # Financial Data
 # curl_cffi >= 0.7.3 supports chrome131 impersonation (required for Yahoo Finance)

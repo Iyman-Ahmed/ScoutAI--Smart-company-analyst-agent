@@ -165,7 +165,7 @@ def _try_playwright_fallback(url: str) -> Optional[str]:
 def _ddg_find_website(company_name: str) -> Optional[str]:
     """Search DuckDuckGo to find a company's official website URL."""
     try:
-        from duckduckgo_search import DDGS
+        from ddgs import DDGS
         ddgs = DDGS(timeout=15)
         results = list(ddgs.text(f"{company_name} official website", max_results=5))
         for r in results:

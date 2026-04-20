@@ -1246,6 +1246,27 @@ with gr.Blocks(css=CSS, title="ScoutAI — Smart Company Analyst Agent") as demo
 
     gr.HTML(TITLE_HTML)
 
+    gr.HTML("""
+    <div style="
+        background: linear-gradient(90deg, #fef3c720, #fde68a20);
+        border: 1px solid #f59e0b50;
+        border-radius: 10px;
+        padding: 10px 16px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 0 0 8px 0;
+        font-size: 0.85em;
+        color: #fbbf24;
+    ">
+        <span style="font-size: 1.1em;">⚡</span>
+        <span>
+            <strong>Heads up:</strong> This app runs entirely on free-tier APIs (Groq, Yahoo Finance, SEC EDGAR, DuckDuckGo).
+            Cold starts may take <strong>30–90 seconds</strong> — please be patient on first load.
+        </span>
+    </div>
+    """)
+
     # ── Input row ──────────────────────────────────────────────────────────
     with gr.Row(elem_classes="input-row"):
         url_input = gr.Textbox(

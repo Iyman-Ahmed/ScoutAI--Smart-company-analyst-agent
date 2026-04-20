@@ -8,9 +8,8 @@ Uses DuckDuckGo (no API key required — completely free).
 
 import time
 import logging
-from typing import Optional
 
-from duckduckgo_search import DDGS
+from ddgs import DDGS
 
 from config import MAX_SEARCH_RESULTS
 

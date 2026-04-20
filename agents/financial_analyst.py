@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from curl_cffi import requests as cffi_requests
-from duckduckgo_search import DDGS
+from ddgs import DDGS
 
 warnings.filterwarnings("ignore")
 logger = logging.getLogger(__name__)
@@ -198,6 +198,9 @@ def _yf_search_ticker(company_name: str) -> Optional[str]:
                 continue
             # Skip complex instruments: warrants (ends in W), units (U), rights
             if ticker.endswith(("W", ".WS", ".RT", ".U")):
+                continue
+            # Prefer US-listed tickers — skip non-US exchange suffixes (.MX, .TO, .L, etc.)
+            if "." in ticker:
                 continue
 
             result_name = q.get("shortname") or q.get("longname") or ""
