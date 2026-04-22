@@ -15,7 +15,6 @@ All endpoints are public and free. EDGAR requires a User-Agent identifying the c
 """
 
 import logging
-import time
 from typing import Optional
 
 from curl_cffi import requests as cffi_requests
@@ -169,6 +168,110 @@ _LIABILITIES_CONCEPTS = ["Liabilities"]
 _EQUITY_CONCEPTS = ["StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"]
 _FCF_CONCEPTS = ["NetCashProvidedByUsedInOperatingActivities"]  # proxy for FCF
 
+_EPS_CONCEPTS = ["EarningsPerShareDiluted", "EarningsPerShareBasic"]
+_SHARES_CONCEPTS = [
+    "CommonStockSharesOutstanding",
+    "WeightedAverageNumberOfDilutedSharesOutstanding",
+    "WeightedAverageNumberOfSharesOutstandingBasic",
+]
+_CASH_CONCEPTS = [
+    "CashAndCashEquivalentsAtCarryingValue",
+    "CashCashEquivalentsAndShortTermInvestments",
+    "CashAndCashEquivalentsAndShortTermInvestments",
+]
+_CURRENT_ASSETS_CONCEPTS  = ["AssetsCurrent"]
+_CURRENT_LIABILITIES_CONCEPTS = ["LiabilitiesCurrent"]
+_DEBT_CONCEPTS = [
+    "LongTermDebtNoncurrent",
+    "LongTermDebt",
+    "LongTermDebtAndCapitalLeaseObligations",
+    "LongTermDebtAndCapitalLeaseObligationsCurrent",
+]
+_CAPEX_CONCEPTS = [
+    "PaymentsToAcquirePropertyPlantAndEquipment",
+    "PaymentsForCapitalImprovements",
+]
+
+# SIC code → coarse sector (covers the most common public company categories)
+_SIC_SECTOR: list = [
+    (range(100,   1000), "Agriculture"),
+    (range(1000,  1500), "Basic Materials"),
+    (range(1500,  2000), "Industrials"),
+    (range(2000,  4000), "Industrials"),
+    (range(4000,  4900), "Industrials"),
+    (range(4800,  4900), "Communication Services"),
+    (range(4900,  5000), "Utilities"),
+    (range(5000,  6000), "Consumer Cyclical"),
+    (range(6000,  6800), "Financial Services"),
+    (range(7370,  7380), "Technology"),
+    (range(7000,  8000), "Consumer Cyclical"),
+    (range(3670,  3680), "Technology"),
+    (range(3674,  3675), "Technology"),
+    (range(8000,  8100), "Healthcare"),
+    (range(8100,  9000), "Consumer Defensive"),
+]
+
+
+def _sic_to_sector(sic: int) -> str:
+    for r, sector in _SIC_SECTOR:
+        if sic in r:
+            return sector
+    return "N/A"
+
+
+def _latest_value(units_dict: dict, concept: str,
+                  forms=("10-K", "10-Q", "10-K/A", "10-Q/A"),
+                  min_days: int = 0) -> Optional[float]:
+    """
+    Return the most recently filed value for a concept (any unit type).
+    min_days: if > 0, only accept entries with (end - start) >= min_days.
+    """
+    from datetime import datetime
+    concept_data = units_dict.get(concept, {})
+    for unit_key in ("USD", "USD/shares", "shares", "pure"):
+        entries = concept_data.get("units", {}).get(unit_key, [])
+        best_val, best_filed, best_end = None, "", ""
+        for e in entries:
+            if e.get("form") not in forms:
+                continue
+            if min_days > 0:
+                try:
+                    s = datetime.strptime(e["start"], "%Y-%m-%d")
+                    d = datetime.strptime(e["end"],   "%Y-%m-%d")
+                    if (d - s).days < min_days:
+                        continue
+                except Exception:
+                    pass
+            filed = e.get("filed", "")
+            end   = e.get("end",   "")
+            if (filed, end) > (best_filed, best_end):
+                v = e.get("val")
+                if v is not None:
+                    best_val, best_filed, best_end = float(v), filed, end
+        if best_val is not None:
+            return best_val
+    return None
+
+
+def fetch_company_metadata(cik: str) -> dict:
+    """
+    Fetch company metadata from EDGAR submissions API.
+    Returns sic, sicDescription, name, tickers, exchanges, employees.
+    """
+    padded = str(cik).zfill(10)
+    try:
+        s = cffi_requests.Session()
+        r = s.get(
+            f"{_BASE}/submissions/CIK{padded}.json",
+            headers=_HEADERS,
+            timeout=12,
+        )
+        if r.status_code == 200:
+            return r.json()
+    except Exception as e:
+        logger.debug(f"EDGAR submissions fetch failed (CIK {cik}): {e}")
+    return {}
+
 
 def _annual_values(gaap: dict, concept: str) -> list[tuple[str, float]]:
     """
@@ -230,17 +333,16 @@ def parse_financials(facts: dict, company_info: dict) -> dict:
     annual data format.
     """
     gaap = facts.get("facts", {}).get("us-gaap", {})
+    dei  = facts.get("facts", {}).get("dei", {})
     if not gaap:
         return {}
 
-    rev_raw     = _pick_concept(gaap, _REVENUE_CONCEPTS)
-    ni_raw      = _pick_concept(gaap, _NET_INCOME_CONCEPTS)
-    gp_raw      = _pick_concept(gaap, _GROSS_PROFIT_CONCEPTS)
-    op_raw      = _pick_concept(gaap, _OPERATING_INCOME_CONCEPTS)
-    ocf_raw     = _pick_concept(gaap, _FCF_CONCEPTS)
-    assets_raw  = _pick_concept(gaap, _ASSETS_CONCEPTS)
-    liab_raw    = _pick_concept(gaap, _LIABILITIES_CONCEPTS)
-    equity_raw  = _pick_concept(gaap, _EQUITY_CONCEPTS)
+    rev_raw    = _pick_concept(gaap, _REVENUE_CONCEPTS)
+    ni_raw     = _pick_concept(gaap, _NET_INCOME_CONCEPTS)
+    gp_raw     = _pick_concept(gaap, _GROSS_PROFIT_CONCEPTS)
+    op_raw     = _pick_concept(gaap, _OPERATING_INCOME_CONCEPTS)
+    ocf_raw    = _pick_concept(gaap, _FCF_CONCEPTS)
+    assets_raw = _pick_concept(gaap, _ASSETS_CONCEPTS)
 
     rev_by_yr   = _to_billions(rev_raw)
     ni_by_yr    = _to_billions(ni_raw)
@@ -289,6 +391,79 @@ def parse_financials(facts: dict, company_info: dict) -> dict:
             latest_assets = assets_by_yr[yr]
             break
 
+    # ── Point-in-time fields (most recent filing, quarterly OK) ──────────────
+    # Annual EPS only — require full-year period (≥340 days) to exclude stub entries
+    eps_latest = (
+        _latest_value(gaap, "EarningsPerShareDiluted", forms=("10-K", "10-K/A"), min_days=340)
+        or _latest_value(gaap, "EarningsPerShareBasic", forms=("10-K", "10-K/A"), min_days=340)
+    )
+    shares_latest   = None
+    for c in _SHARES_CONCEPTS:
+        v = _latest_value(gaap, c)
+        if v and v > 1e6:   # sanity: shares should be > 1M
+            shares_latest = v
+            break
+    cash_latest     = None
+    for c in _CASH_CONCEPTS:
+        v = _latest_value(gaap, c)
+        if v is not None:
+            cash_latest = v
+            break
+    cur_assets  = _latest_value(gaap, "AssetsCurrent")
+    cur_liab    = _latest_value(gaap, "LiabilitiesCurrent")
+    debt_latest = None
+    for c in _DEBT_CONCEPTS:
+        v = _latest_value(gaap, c)
+        if v is not None:
+            debt_latest = v
+            break
+    equity_latest = None
+    for c in _EQUITY_CONCEPTS:
+        v = _latest_value(gaap, c)
+        if v is not None:
+            equity_latest = v
+            break
+    capex_latest = None
+    for c in _CAPEX_CONCEPTS:
+        v = _latest_value(gaap, c)
+        if v is not None:
+            capex_latest = abs(v)
+            break
+    ocf_latest = _latest_value(gaap, "NetCashProvidedByUsedInOperatingActivities")
+
+    # Derived ratios
+    current_ratio_val = None
+    if cur_assets and cur_liab and cur_liab != 0:
+        current_ratio_val = round(cur_assets / cur_liab, 2)
+
+    de_ratio_val = None
+    if debt_latest is not None and equity_latest and equity_latest > 0:
+        de_ratio_val = round(debt_latest / equity_latest * 100, 1)
+
+    fcf_latest = None
+    if ocf_latest is not None and capex_latest is not None:
+        fcf_latest = ocf_latest - capex_latest
+
+    # Employees — DEI taxonomy first, then submissions API
+    employees_latest = _latest_value(dei, "EntityNumberOfEmployees")
+
+    # SIC → sector/industry from EDGAR submissions API (not in companyfacts)
+    meta = fetch_company_metadata(company_info.get("cik", ""))
+    sic_raw  = meta.get("sic")
+    sic_desc = meta.get("sicDescription", "")
+    sector_val   = _sic_to_sector(int(sic_raw)) if sic_raw else "N/A"
+    industry_val = sic_desc if sic_desc else "N/A"
+    # Submissions API also has employee count in some filings
+    if employees_latest is None:
+        try:
+            for filing in (meta.get("filings", {}).get("recent", {}).get("items", []) or []):
+                emp = filing.get("employees")
+                if emp:
+                    employees_latest = float(emp)
+                    break
+        except Exception:
+            pass
+
     result = {
         "source":         "SEC EDGAR",
         "cik":            company_info.get("cik", ""),
@@ -298,7 +473,7 @@ def parse_financials(facts: dict, company_info: dict) -> dict:
         "years":          years,
         "revenue":        revenue,
         "net_income":     net_income,
-        "fcf":            [None] * len(years),   # OCF used as proxy below
+        "fcf":            [None] * len(years),
         "operating_cf":   ocf,
         "gross_margin":   gross_margin,
         "operating_margin": op_margin,
@@ -306,13 +481,24 @@ def parse_financials(facts: dict, company_info: dict) -> dict:
         "d_e_ratio":      [None] * len(years),
         "current_ratio":  [None] * len(years),
         "revenue_cagr":   cagr,
-        # Extra balance-sheet summary
         "latest_assets_b": latest_assets,
+        # Point-in-time fields for raw_data population
+        "edgar_eps":           round(eps_latest, 2) if eps_latest is not None else None,
+        "edgar_shares":        shares_latest,
+        "edgar_cash":          cash_latest,
+        "edgar_debt":          debt_latest,
+        "edgar_current_ratio": current_ratio_val,
+        "edgar_de_ratio":      de_ratio_val,
+        "edgar_fcf":           fcf_latest,
+        "edgar_employees":     int(employees_latest) if employees_latest else None,
+        "edgar_sector":        sector_val,
+        "edgar_industry":      industry_val,
     }
 
     logger.info(
         f"EDGAR parsed: {company_info.get('title')} | "
-        f"years={years} | rev={revenue} | cagr={cagr}%"
+        f"years={years} | rev={revenue} | cagr={cagr}% | "
+        f"eps={eps_latest} shares={shares_latest} cash={cash_latest}"
     )
     return result
 

@@ -1206,9 +1206,8 @@ def _build_raw_data_from_yf(ticker: str) -> dict:
 
 def _build_raw_data_from_v8_edgar(ticker: str, edgar_annual: dict) -> dict:
     """
-    Fallback 2: v8 chart (no crumb) + SEC EDGAR annual data.
+    Fallback 2: v8 chart (no crumb) + SEC EDGAR annual + point-in-time data.
     Always works on HuggingFace — neither source requires Yahoo Finance auth.
-    Covers: current price, 52w range, revenue, margins from official filings.
     """
     # v8 chart — works without crumb or cookies
     meta: dict = {}
@@ -1243,37 +1242,80 @@ def _build_raw_data_from_v8_edgar(ticker: str, edgar_annual: dict) -> dict:
     nm     = _last(edgar_annual.get("net_margin", []))
     cagr   = edgar_annual.get("revenue_cagr")
 
+    # EDGAR point-in-time fields (from expanded parse_financials)
+    eps         = edgar_annual.get("edgar_eps")
+    shares      = edgar_annual.get("edgar_shares")
+    cash_raw    = edgar_annual.get("edgar_cash")
+    debt_raw    = edgar_annual.get("edgar_debt")
+    cur_ratio   = edgar_annual.get("edgar_current_ratio")
+    de_ratio    = edgar_annual.get("edgar_de_ratio")
+    fcf_raw_val = edgar_annual.get("edgar_fcf")
+    employees   = edgar_annual.get("edgar_employees")
+    sector      = edgar_annual.get("edgar_sector", "N/A")
+    industry    = edgar_annual.get("edgar_industry", "N/A")
+
+    # Derive market cap from shares × current price
+    market_cap_raw = None
+    if shares and price not in ("N/A", None, ""):
+        try:
+            market_cap_raw = float(shares) * float(price)
+        except Exception:
+            pass
+
+    # P/E from price and EPS
+    pe_ratio = "N/A"
+    if eps and price not in ("N/A", None, ""):
+        try:
+            pe = float(price) / float(eps)
+            if 0 < pe < 1000:
+                pe_ratio = round(pe, 1)
+        except Exception:
+            pass
+
+    # Price/Sales from price, shares, revenue
+    ps_ratio = "N/A"
+    if market_cap_raw and rev_b:
+        try:
+            ps = market_cap_raw / (rev_b * 1e9)
+            if 0 < ps < 500:
+                ps_ratio = round(ps, 2)
+        except Exception:
+            pass
+
     def _b(val):
         return _fmt_large(val * 1e9) if val is not None else "N/A"
 
     def _pct_val(val):
         return f"{val:.1f}%" if val is not None else "N/A"
 
-    logger.info(f"v8+EDGAR fallback for {ticker}: price={price}, rev={rev_b}B, gm={gm}%")
+    logger.info(
+        f"v8+EDGAR fallback for {ticker}: price={price}, rev={rev_b}B, gm={gm}%, "
+        f"mktcap={market_cap_raw}, eps={eps}, employees={employees}"
+    )
 
     return {
         "ticker":                 ticker,
         "company_name":           co_name,
-        "sector":                 "N/A",
-        "industry":               "N/A",
+        "sector":                 sector,
+        "industry":               industry,
         "country":                "United States",
-        "employees":              "N/A",
+        "employees":              str(employees) if employees else "N/A",
         "exchange":               exchange,
-        "market_cap":             "N/A",
-        "market_cap_raw":         "N/A",
+        "market_cap":             _fmt_large(market_cap_raw) if market_cap_raw else "N/A",
+        "market_cap_raw":         market_cap_raw or "N/A",
         "enterprise_value":       "N/A",
         "revenue_ttm":            _b(rev_b),
         "gross_profit":           "N/A",
         "ebitda":                 "N/A",
         "net_income":             _b(ni_b),
         "operating_cash_flow":    _b(ocf_b),
-        "cash":                   "N/A",
-        "debt":                   "N/A",
-        "pe_ratio":               "N/A",
+        "cash":                   _fmt_large(cash_raw) if cash_raw else "N/A",
+        "debt":                   _fmt_large(debt_raw) if debt_raw else "N/A",
+        "pe_ratio":               pe_ratio,
         "forward_pe":             "N/A",
         "ev_ebitda":              "N/A",
-        "price_to_sales":         "N/A",
-        "eps_trailing":           "N/A",
+        "price_to_sales":         ps_ratio,
+        "eps_trailing":           eps if eps is not None else "N/A",
         "eps_forward":            "N/A",
         "revenue_growth_yoy":     _pct_val(cagr) if cagr else "N/A",
         "earnings_growth_yoy":    "N/A",
@@ -1282,9 +1324,9 @@ def _build_raw_data_from_v8_edgar(ticker: str, edgar_annual: dict) -> dict:
         "operating_margin":       _pct_val(om),
         "roe":                    "N/A",
         "roa":                    "N/A",
-        "d_e_ratio":              "N/A",
-        "current_ratio":          "N/A",
-        "free_cashflow":          "N/A",
+        "d_e_ratio":              de_ratio if de_ratio is not None else "N/A",
+        "current_ratio":          cur_ratio if cur_ratio is not None else "N/A",
+        "free_cashflow":          _fmt_large(fcf_raw_val) if fcf_raw_val else "N/A",
         "current_price":          price,
         "52w_high":               w52_high,
         "52w_low":                w52_low,
@@ -1300,8 +1342,8 @@ def _build_raw_data_from_v8_edgar(ticker: str, edgar_annual: dict) -> dict:
         "target_low":             "N/A",
         "analyst_count":          "N/A",
         "payout_ratio":           "N/A",
-        "shares_outstanding":     "N/A",
-        "fcf_raw":                "N/A",
+        "shares_outstanding":     _fmt_large(shares) if shares else "N/A",
+        "fcf_raw":                fcf_raw_val or "N/A",
     }
 
 
