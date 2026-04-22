@@ -15,9 +15,11 @@ ddgs>=0.1.0
 # Financial Data
 # curl_cffi >= 0.7.3 supports chrome131 impersonation (required for Yahoo Finance)
 # pandas_datareader: Stooq fallback for stock price history
+# yfinance: fallback for HuggingFace where YF v10 quoteSummary gets blocked
 curl-cffi>=0.7.3
 pandas>=2.0.0
 pandas-datareader>=0.10.0
+yfinance>=0.2.40
 
 # UI & Charts
 gradio>=5.0.0

@@ -967,6 +967,206 @@ def _merge_annual(yf_annual: dict, edgar_annual: dict) -> dict:
         return yf_annual
 
 
+# ─── yfinance Fallback (HuggingFace / rate-limited environments) ──────────────
+
+def _fmt_large(val) -> str:
+    """Format raw number to human-readable string (4.90B, 142.3M, etc.)."""
+    try:
+        v = float(val)
+        if abs(v) >= 1e12:
+            return f"{v/1e12:.2f}T"
+        if abs(v) >= 1e9:
+            return f"{v/1e9:.2f}B"
+        if abs(v) >= 1e6:
+            return f"{v/1e6:.2f}M"
+        return f"{v:,.0f}"
+    except Exception:
+        return "N/A"
+
+
+def _pct_str(val) -> str:
+    try:
+        return f"{float(val) * 100:.1f}%"
+    except Exception:
+        return "N/A"
+
+
+def _build_raw_data_from_yf(ticker: str) -> dict:
+    """
+    Fallback 1: use yfinance .info when curl_cffi quoteSummary is blocked.
+    yfinance handles crumb/cookie auth differently and often works on HF.
+    """
+    try:
+        import yfinance as yf
+        info = yf.Ticker(ticker).info
+        if not info or (info.get("trailingPE") is None and info.get("marketCap") is None):
+            logger.warning(f"yfinance returned empty info for {ticker}")
+            return {}
+
+        logger.info(f"yfinance fallback succeeded for {ticker}: {len(info)} fields")
+
+        def _v(key, default="N/A"):
+            v = info.get(key)
+            return v if v is not None and v != "" else default
+
+        return {
+            "ticker":                 ticker,
+            "company_name":           _v("longName") or _v("shortName"),
+            "sector":                 _v("sector"),
+            "industry":               _v("industry"),
+            "country":                _v("country"),
+            "employees":              _v("fullTimeEmployees"),
+            "exchange":               _v("exchange"),
+            "market_cap":             _fmt_large(_v("marketCap", None)),
+            "market_cap_raw":         _v("marketCap"),
+            "enterprise_value":       _fmt_large(_v("enterpriseValue", None)),
+            "revenue_ttm":            _fmt_large(_v("totalRevenue", None)),
+            "gross_profit":           _fmt_large(_v("grossProfits", None)),
+            "ebitda":                 _fmt_large(_v("ebitda", None)),
+            "net_income":             _fmt_large(_v("netIncomeToCommon", None)),
+            "operating_cash_flow":    _fmt_large(_v("operatingCashflow", None)),
+            "cash":                   _fmt_large(_v("totalCash", None)),
+            "debt":                   _fmt_large(_v("totalDebt", None)),
+            "pe_ratio":               _v("trailingPE"),
+            "forward_pe":             _v("forwardPE"),
+            "ev_ebitda":              _v("enterpriseToEbitda"),
+            "price_to_sales":         _v("priceToSalesTrailing12Months"),
+            "eps_trailing":           _v("trailingEps"),
+            "eps_forward":            _v("forwardEps"),
+            "revenue_growth_yoy":     _pct_str(_v("revenueGrowth", None)),
+            "earnings_growth_yoy":    _pct_str(_v("earningsGrowth", None)),
+            "gross_margin":           _pct_str(_v("grossMargins", None)),
+            "profit_margin":          _pct_str(_v("profitMargins", None)),
+            "operating_margin":       _pct_str(_v("operatingMargins", None)),
+            "roe":                    _pct_str(_v("returnOnEquity", None)),
+            "roa":                    _pct_str(_v("returnOnAssets", None)),
+            "d_e_ratio":              _v("debtToEquity"),
+            "current_ratio":          _v("currentRatio"),
+            "free_cashflow":          _fmt_large(_v("freeCashflow", None)),
+            "current_price":          _v("currentPrice") or _v("regularMarketPrice"),
+            "52w_high":               _v("fiftyTwoWeekHigh"),
+            "52w_low":                _v("fiftyTwoWeekLow"),
+            "analyst_target":         _v("targetMeanPrice"),
+            "analyst_recommendation": _v("recommendationKey"),
+            "beta":                   _v("beta"),
+            "dividend_yield":         _pct_str(_v("dividendYield", None)),
+            "peg_ratio":              _v("pegRatio"),
+            "price_to_book":          _v("priceToBook"),
+            "short_ratio":            _v("shortRatio"),
+            "week52_change":          _pct_str(_v("52WeekChange", None)),
+            "target_high":            _v("targetHighPrice"),
+            "target_low":             _v("targetLowPrice"),
+            "analyst_count":          _v("numberOfAnalystOpinions"),
+            "payout_ratio":           _pct_str(_v("payoutRatio", None)),
+            "shares_outstanding":     _fmt_large(_v("sharesOutstanding", None)),
+            "fcf_raw":                _v("freeCashflow"),
+        }
+    except Exception as e:
+        logger.warning(f"yfinance fallback failed for {ticker}: {e}")
+        return {}
+
+
+def _build_raw_data_from_v8_edgar(ticker: str, edgar_annual: dict) -> dict:
+    """
+    Fallback 2: v8 chart (no crumb) + SEC EDGAR annual data.
+    Always works on HuggingFace — neither source requires Yahoo Finance auth.
+    Covers: current price, 52w range, revenue, margins from official filings.
+    """
+    # v8 chart — works without crumb or cookies
+    meta: dict = {}
+    r = _yf_get(
+        f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?interval=1d&range=5d",
+        retries=2, delay=1.0,
+    )
+    if r:
+        try:
+            meta = r.json()["chart"]["result"][0]["meta"]
+        except Exception:
+            pass
+
+    price    = meta.get("regularMarketPrice", "N/A")
+    w52_high = meta.get("fiftyTwoWeekHigh", "N/A")
+    w52_low  = meta.get("fiftyTwoWeekLow", "N/A")
+    co_name  = meta.get("longName") or meta.get("shortName", "N/A")
+    exchange = meta.get("fullExchangeName", meta.get("exchangeName", "N/A"))
+
+    # Latest EDGAR annual values (most recent year)
+    def _last(lst):
+        if not lst:
+            return None
+        vals = [v for v in lst if v is not None]
+        return vals[-1] if vals else None
+
+    rev_b  = _last(edgar_annual.get("revenue", []))
+    ni_b   = _last(edgar_annual.get("net_income", []))
+    ocf_b  = _last(edgar_annual.get("operating_cf", []))
+    gm     = _last(edgar_annual.get("gross_margin", []))
+    om     = _last(edgar_annual.get("operating_margin", []))
+    nm     = _last(edgar_annual.get("net_margin", []))
+    cagr   = edgar_annual.get("revenue_cagr")
+
+    def _b(val):
+        return _fmt_large(val * 1e9) if val is not None else "N/A"
+
+    def _pct_val(val):
+        return f"{val:.1f}%" if val is not None else "N/A"
+
+    logger.info(f"v8+EDGAR fallback for {ticker}: price={price}, rev={rev_b}B, gm={gm}%")
+
+    return {
+        "ticker":                 ticker,
+        "company_name":           co_name,
+        "sector":                 edgar_annual.get("edgar_name", "N/A"),
+        "industry":               "N/A",
+        "country":                "United States",
+        "employees":              "N/A",
+        "exchange":               exchange,
+        "market_cap":             "N/A",
+        "market_cap_raw":         "N/A",
+        "enterprise_value":       "N/A",
+        "revenue_ttm":            _b(rev_b),
+        "gross_profit":           "N/A",
+        "ebitda":                 "N/A",
+        "net_income":             _b(ni_b),
+        "operating_cash_flow":    _b(ocf_b),
+        "cash":                   "N/A",
+        "debt":                   "N/A",
+        "pe_ratio":               "N/A",
+        "forward_pe":             "N/A",
+        "ev_ebitda":              "N/A",
+        "price_to_sales":         "N/A",
+        "eps_trailing":           "N/A",
+        "eps_forward":            "N/A",
+        "revenue_growth_yoy":     _pct_val(cagr) if cagr else "N/A",
+        "earnings_growth_yoy":    "N/A",
+        "gross_margin":           _pct_val(gm),
+        "profit_margin":          _pct_val(nm),
+        "operating_margin":       _pct_val(om),
+        "roe":                    "N/A",
+        "roa":                    "N/A",
+        "d_e_ratio":              "N/A",
+        "current_ratio":          "N/A",
+        "free_cashflow":          "N/A",
+        "current_price":          price,
+        "52w_high":               w52_high,
+        "52w_low":                w52_low,
+        "analyst_target":         "N/A",
+        "analyst_recommendation": "N/A",
+        "beta":                   "N/A",
+        "dividend_yield":         "N/A",
+        "peg_ratio":              "N/A",
+        "price_to_book":          "N/A",
+        "short_ratio":            "N/A",
+        "week52_change":          "N/A",
+        "target_high":            "N/A",
+        "target_low":             "N/A",
+        "analyst_count":          "N/A",
+        "payout_ratio":           "N/A",
+        "shares_outstanding":     "N/A",
+        "fcf_raw":                "N/A",
+    }
+
+
 # ─── Main Entry Point ─────────────────────────────────────────────────────────
 
 def get_financial_data(company_name: str) -> dict:
@@ -1012,8 +1212,15 @@ def get_financial_data(company_name: str) -> dict:
         time.sleep(0.3)
         news_items = fetch_recent_news(company_name, ticker)
 
-        raw_data  = build_raw_data(ticker, qs) if qs else {"ticker": ticker}
-        formatted = format_public_data(raw_data) if qs else (
+        if qs:
+            raw_data = build_raw_data(ticker, qs)
+        else:
+            logger.warning(f"quoteSummary blocked for {ticker} — trying yfinance fallback")
+            raw_data = _build_raw_data_from_yf(ticker)
+            if not raw_data.get("market_cap") or raw_data.get("market_cap") == "N/A":
+                logger.warning(f"yfinance also failed for {ticker} — using v8+EDGAR fallback")
+                raw_data = _build_raw_data_from_v8_edgar(ticker, edgar_annual)
+        formatted = format_public_data(raw_data) if raw_data.get("revenue_ttm", "N/A") != "N/A" else (
             f"Ticker: {ticker}. Metrics temporarily unavailable."
         )
 
