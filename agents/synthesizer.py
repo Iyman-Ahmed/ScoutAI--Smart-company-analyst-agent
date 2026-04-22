@@ -138,4 +138,7 @@ def synthesize_report(
         return response.content
     except Exception as e:
         logger.error(f"LLM synthesis failed: {e}")
+        err = str(e).lower()
+        if "429" in err or "rate limit" in err or "rate_limit" in err:
+            return "**Groq rate limit reached.** The free tier has a token-per-minute cap. Please wait 30–60 seconds and try again."
         return f"**Report generation failed:** {str(e)}\n\nPlease check your Groq API key and try again."
