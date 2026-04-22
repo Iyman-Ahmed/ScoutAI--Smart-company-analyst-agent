@@ -967,6 +967,144 @@ def _merge_annual(yf_annual: dict, edgar_annual: dict) -> dict:
         return yf_annual
 
 
+# ─── Yahoo Finance v7 Quote (no crumb — universal supplement) ────────────────
+
+def _fetch_v7_quote(ticker: str) -> dict:
+    """
+    Fetch real-time quote from YF v7 API.
+    Returns: marketCap, trailingPE, forwardPE, epsTrailingTwelveMonths,
+    epsForward, beta, priceToBook, pegRatio, sector, industry, etc.
+    Requires crumb (same auth as quoteSummary but lighter request — often
+    succeeds where v10 quoteSummary is blocked on HuggingFace).
+    """
+    fields = (
+        "symbol,longName,shortName,regularMarketPrice,marketCap,"
+        "trailingPE,forwardPE,epsTrailingTwelveMonths,epsForward,"
+        "beta,priceToBook,pegRatio,fiftyTwoWeekHigh,fiftyTwoWeekLow,"
+        "dividendYield,trailingAnnualDividendYield,averageAnalystRating,"
+        "targetMeanPrice,numberOfAnalystOpinions,shortRatio,"
+        "fiftyTwoWeekChangePercent,enterpriseValue,bookValue,"
+        "fullExchangeName,sector,industry,fullTimeEmployees"
+    )
+    crumb = _get_crumb()
+    crumb_param = f"&crumb={crumb}" if crumb else ""
+    for base in ["query1", "query2"]:
+        r = _yf_get(
+            f"https://{base}.finance.yahoo.com/v7/finance/quote"
+            f"?symbols={ticker}&fields={fields}{crumb_param}",
+            retries=2, delay=1.5,
+        )
+        if r:
+            try:
+                result = r.json()["quoteResponse"]["result"]
+                if result:
+                    logger.info(f"v7 quote fetched for {ticker}: {len(result[0])} fields")
+                    return result[0]
+            except Exception as e:
+                logger.debug(f"v7 quote parse error: {e}")
+                continue
+    logger.warning(f"v7 quote failed for {ticker}")
+    return {}
+
+
+def _fetch_financial_data_module(ticker: str) -> dict:
+    """
+    Fetch only the financialData module from v10 quoteSummary.
+    Lighter than the full 5-module request — may succeed on HuggingFace
+    when the full quoteSummary is blocked. Provides: ebitda, targetMeanPrice,
+    targetHighPrice, targetLowPrice, numberOfAnalystOpinions, recommendationKey,
+    returnOnEquity, returnOnAssets, debtToEquity, currentRatio, freeCashflow, etc.
+    """
+    crumb = _get_crumb()
+    crumb_param = f"&crumb={crumb}" if crumb else ""
+    for base in ["query2", "query1"]:
+        r = _yf_get(
+            f"https://{base}.finance.yahoo.com/v10/finance/quoteSummary/{ticker}"
+            f"?modules=financialData,defaultKeyStatistics,assetProfile{crumb_param}",
+            retries=2, delay=1.5,
+        )
+        if r:
+            try:
+                return r.json()["quoteSummary"]["result"][0]
+            except Exception:
+                continue
+    return {}
+
+
+def _supplement_from_v7(raw_data: dict, v7: dict) -> None:
+    """Fill N/A fields in raw_data from YF v7 quote data (in-place)."""
+
+    def _fill(rd_key: str, v7_key: str, transform=None):
+        if str(raw_data.get(rd_key, "N/A")) not in ("N/A", "", "None", "0"):
+            return
+        val = v7.get(v7_key)
+        if val is None or val == "" or val == 0:
+            return
+        try:
+            raw_data[rd_key] = transform(val) if transform else val
+        except Exception:
+            pass
+
+    def _r2(x):
+        return round(float(x), 2)
+
+    _fill("market_cap",       "marketCap",                   _fmt_large)
+    _fill("market_cap_raw",   "marketCap",                   lambda x: x)
+    _fill("enterprise_value", "enterpriseValue",             _fmt_large)
+    _fill("pe_ratio",         "trailingPE",                  _r2)
+    _fill("forward_pe",       "forwardPE",                   _r2)
+    _fill("eps_trailing",     "epsTrailingTwelveMonths",     _r2)
+    _fill("eps_forward",      "epsForward",                  _r2)
+    _fill("beta",             "beta",                        _r2)
+    _fill("price_to_book",    "priceToBook",                 _r2)
+    _fill("peg_ratio",        "pegRatio",                    _r2)
+    _fill("short_ratio",      "shortRatio",                  _r2)
+    _fill("52w_high",         "fiftyTwoWeekHigh",            _r2)
+    _fill("52w_low",          "fiftyTwoWeekLow",             _r2)
+    _fill("current_price",    "regularMarketPrice",          _r2)
+    _fill("company_name",     "longName",                    str)
+    _fill("exchange",         "fullExchangeName",            str)
+    _fill("sector",           "sector",                      str)
+    _fill("industry",         "industry",                    str)
+    _fill("employees",        "fullTimeEmployees",           str)
+    _fill("analyst_target",   "targetMeanPrice",             _r2)
+    _fill("analyst_count",    "numberOfAnalystOpinions",     lambda x: int(x))
+
+    # analyst_recommendation: v7 returns "1.8 - Buy" → extract label
+    if raw_data.get("analyst_recommendation", "N/A") == "N/A":
+        rating = v7.get("averageAnalystRating", "")
+        if rating and " - " in str(rating):
+            raw_data["analyst_recommendation"] = rating.split(" - ")[-1].lower()
+
+    # dividend_yield: v7 returns decimal (0.015 = 1.5%)
+    if raw_data.get("dividend_yield", "N/A") == "N/A":
+        dy = v7.get("dividendYield") or v7.get("trailingAnnualDividendYield")
+        if dy is not None and dy != 0:
+            try:
+                raw_data["dividend_yield"] = f"{float(dy) * 100:.2f}%"
+            except Exception:
+                pass
+
+    # 52-week return
+    if raw_data.get("week52_change", "N/A") == "N/A":
+        chg = v7.get("fiftyTwoWeekChangePercent") or v7.get("52WeekChange")
+        if chg is not None:
+            try:
+                raw_data["week52_change"] = f"{float(chg) * 100:.1f}%"
+            except Exception:
+                pass
+
+    # upside to analyst target (derived)
+    price = raw_data.get("current_price")
+    target = raw_data.get("analyst_target")
+    if price and target and str(price) not in ("N/A", "") and str(target) not in ("N/A", ""):
+        try:
+            upside = (float(target) / float(price) - 1) * 100
+            raw_data["upside_to_target"] = f"{upside:+.1f}%"
+        except Exception:
+            pass
+
+
 # ─── yfinance Fallback (HuggingFace / rate-limited environments) ──────────────
 
 def _fmt_large(val) -> str:
@@ -1116,7 +1254,7 @@ def _build_raw_data_from_v8_edgar(ticker: str, edgar_annual: dict) -> dict:
     return {
         "ticker":                 ticker,
         "company_name":           co_name,
-        "sector":                 edgar_annual.get("edgar_name", "N/A"),
+        "sector":                 "N/A",
         "industry":               "N/A",
         "country":                "United States",
         "employees":              "N/A",
@@ -1215,11 +1353,27 @@ def get_financial_data(company_name: str) -> dict:
         if qs:
             raw_data = build_raw_data(ticker, qs)
         else:
-            logger.warning(f"quoteSummary blocked for {ticker} — trying yfinance fallback")
-            raw_data = _build_raw_data_from_yf(ticker)
-            if not raw_data.get("market_cap") or raw_data.get("market_cap") == "N/A":
-                logger.warning(f"yfinance also failed for {ticker} — using v8+EDGAR fallback")
-                raw_data = _build_raw_data_from_v8_edgar(ticker, edgar_annual)
+            # Full 5-module quoteSummary blocked — try lighter 3-module request
+            # (financialData + defaultKeyStatistics + assetProfile).
+            # The price/summaryDetail modules cause most HF blocks; the lighter
+            # request often succeeds and provides EBITDA, ROE, margins, sector, etc.
+            logger.warning(f"Full quoteSummary blocked for {ticker} — trying lighter fetch")
+            partial_qs = _fetch_financial_data_module(ticker)
+            if partial_qs:
+                logger.info(f"Lighter quoteSummary succeeded for {ticker}")
+                raw_data = build_raw_data(ticker, partial_qs)
+            else:
+                raw_data = _build_raw_data_from_yf(ticker)
+                if not raw_data.get("market_cap") or raw_data.get("market_cap") == "N/A":
+                    logger.warning(f"yfinance also failed for {ticker} — using v8+EDGAR fallback")
+                    raw_data = _build_raw_data_from_v8_edgar(ticker, edgar_annual)
+
+        # Always supplement with v7 quote — fills remaining N/A gaps (market cap,
+        # P/E, EPS, beta, sector, industry) regardless of which path ran above.
+        v7_data = _fetch_v7_quote(ticker)
+        if v7_data:
+            _supplement_from_v7(raw_data, v7_data)
+
         formatted = format_public_data(raw_data) if raw_data.get("revenue_ttm", "N/A") != "N/A" else (
             f"Ticker: {ticker}. Metrics temporarily unavailable."
         )
