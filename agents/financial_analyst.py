@@ -800,24 +800,26 @@ def find_and_fetch_competitors(company_name: str, ticker: str, sector: str,
         if competitors:
             logger.info(f"Competitors via {label}: {[c['ticker'] for c in competitors]}")
 
-    # ── 1. Yahoo Finance recommendations (short timeout) ────────────────────
-    try:
-        r = _yf_get(
-            f"https://query2.finance.yahoo.com/v6/finance/recommendationsbyticker/{ticker}",
-            retries=1, delay=1.0,
-        )
-        if r and r.status_code == 200:
-            items = r.json().get("finance", {}).get("result", [{}])[0].get("recommendedSymbols", [])
-            rec_tickers = [x["symbol"] for x in items[:6]]
-            logger.info(f"YF recommended for {ticker}: {rec_tickers}")
-            _add_from_list(rec_tickers, "YF recommendations")
-    except Exception as e:
-        logger.debug(f"YF recommendations failed: {e}")
+    # ── 1. Sector/industry-based peer map (most accurate — run first) ────────
+    peer_tickers = _get_sector_peers(ticker, sector, industry)
+    _add_from_list(peer_tickers, f"sector peers ({sector}/{industry})")
 
-    # ── 2. Sector/industry-based peer map ───────────────────────────────────
+    # ── 2. Yahoo Finance recommendations (supplement only if map gave <3) ────
+    # YF recommendations are often wrong for small/mid-cap companies (e.g.
+    # returns GOOGL/META for Upwork), so only use them to fill remaining slots.
     if len(competitors) < 3:
-        peer_tickers = _get_sector_peers(ticker, sector, industry)
-        _add_from_list(peer_tickers, f"sector peers ({sector}/{industry})")
+        try:
+            r = _yf_get(
+                f"https://query2.finance.yahoo.com/v6/finance/recommendationsbyticker/{ticker}",
+                retries=1, delay=1.0,
+            )
+            if r and r.status_code == 200:
+                items = r.json().get("finance", {}).get("result", [{}])[0].get("recommendedSymbols", [])
+                rec_tickers = [x["symbol"] for x in items[:6]]
+                logger.info(f"YF recommended for {ticker}: {rec_tickers}")
+                _add_from_list(rec_tickers, "YF recommendations")
+        except Exception as e:
+            logger.debug(f"YF recommendations failed: {e}")
 
     # ── 3. DDG fallback: search → extract /quote/TICKER URL patterns ────────
     if len(competitors) < 2:
