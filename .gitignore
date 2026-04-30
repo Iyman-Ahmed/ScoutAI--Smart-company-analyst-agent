@@ -55,3 +55,4 @@ playwright-browsers/
 
 # HuggingFace cache
 .cache/
+CLAUDE.md
