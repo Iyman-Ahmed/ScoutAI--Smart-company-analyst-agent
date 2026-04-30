@@ -649,6 +649,12 @@ def build_trader_scorecard(raw_financial: dict) -> str:
     ev_ebitda = _float(rd.get("ev_ebitda"))
     short_r   = _float(rd.get("short_ratio"))
     w52_chg   = _float(rd.get("week52_change"))
+    if w52_chg is None:
+        hist = raw_financial.get("stock_history", {})
+        if hist and hist.get("closes") and len(hist["closes"]) > 1:
+            closes = hist["closes"]
+            if closes[0]:
+                w52_chg = (closes[-1] - closes[0]) / closes[0] * 100
     tgt_hi    = _float(rd.get("target_high"))
     tgt_lo    = _float(rd.get("target_low"))
     tgt_mean  = _float(rd.get("analyst_target"))
@@ -658,7 +664,7 @@ def build_trader_scorecard(raw_financial: dict) -> str:
     div_yield = rd.get("dividend_yield", "N/A")
     beta      = _float(rd.get("beta"))
     rec_key   = str(rd.get("analyst_recommendation", "")).lower()
-    eps_ttm   = rd.get("eps_ttm", "N/A")
+    eps_ttm   = rd.get("eps_trailing", "N/A")
     eps_fwd   = rd.get("eps_forward", "N/A")
 
     upside_pct = ((tgt_mean - price) / price * 100) if price and tgt_mean and price > 0 else None
@@ -1230,14 +1236,16 @@ TITLE_HTML = """
 # Hide API key input when GROQ_API_KEY is pre-set (e.g. HuggingFace Spaces secret)
 _KEY_PRECONFIGURED = bool(os.getenv("GROQ_API_KEY", ""))
 
-EXAMPLES = [
-    ["Nvidia",                ""],
-    ["Upwork",                ""],
-    ["https://shopify.com",   ""],
-    ["Duolingo",              ""],
-    ["https://stripe.com",    ""],
-    ["OpenAI",                ""],
-]
+_EXAMPLE_URLS = ["Nvidia", "Upwork", "https://shopify.com", "Duolingo", "https://stripe.com", "OpenAI"]
+
+# When key is pre-configured (HuggingFace), examples have only the URL column.
+# When key is manual, examples have both URL + key columns so the table matches the inputs.
+if _KEY_PRECONFIGURED:
+    EXAMPLES        = [[u] for u in _EXAMPLE_URLS]
+    _EXAMPLE_INPUTS = None          # set after input components are defined
+else:
+    EXAMPLES        = [[u, ""] for u in _EXAMPLE_URLS]
+    _EXAMPLE_INPUTS = None          # set after input components are defined
 
 
 # ─── Gradio Blocks UI ────────────────────────────────────────────────────────
@@ -1330,7 +1338,7 @@ with gr.Blocks(css=CSS, title="ScoutAI — Smart Company Analyst Agent") as demo
     # ── Examples ───────────────────────────────────────────────────────────
     gr.Examples(
         examples=EXAMPLES,
-        inputs=[url_input, api_key_input],
+        inputs=[url_input] if _KEY_PRECONFIGURED else [url_input, api_key_input],
         label="Quick examples" if _KEY_PRECONFIGURED else "Quick examples (add your Groq key first)",
     )
 

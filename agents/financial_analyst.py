@@ -484,6 +484,29 @@ def format_public_data(rd: dict) -> str:
 
 # ─── Annual Historical Financials ────────────────────────────────────────────
 
+def _format_annual_for_llm(annual: dict) -> str:
+    """Compact markdown table of annual revenue/net income for the LLM prompt."""
+    years   = annual.get("years", [])
+    revenue = annual.get("revenue", [])
+    ni      = annual.get("net_income", [])
+    if not years or not any(v is not None for v in revenue):
+        return ""
+    lines = [
+        "**Annual Financials (SEC EDGAR 10-K):**",
+        "| Year | Revenue ($B) | Net Income ($B) |",
+        "|------|-------------|----------------|",
+    ]
+    for i, yr in enumerate(years):
+        rev_s = f"{revenue[i]:.2f}" if i < len(revenue) and revenue[i] is not None else "N/A"
+        ni_s  = f"{ni[i]:.2f}"      if i < len(ni) and ni[i] is not None else "N/A"
+        lines.append(f"| {yr} | {rev_s} | {ni_s} |")
+    cagr = annual.get("revenue_cagr")
+    if cagr is not None:
+        sign = "+" if cagr >= 0 else ""
+        lines.append(f"\nRevenue CAGR ({years[0]}–{years[-1]}): {sign}{cagr:.1f}%")
+    return "\n".join(lines)
+
+
 def fetch_annual_financials(ticker: str) -> dict:
     """
     Fetch annual revenue + earnings via the 'earnings' module (reliable),
@@ -635,7 +658,13 @@ _SECTOR_PEERS: dict = {
         "Software—Application": ["MSFT", "ADBE", "CRM", "NOW", "WDAY"],
         "Software—Infrastructure": ["ORCL", "IBM", "MSFT", "VMW", "SNOW"],
         "Consumer Electronics": ["AAPL", "SONY", "SSNLF", "MSFT"],
-        "Internet Content & Information": ["GOOGL", "META", "SNAP", "PINS"],
+        "Internet Content & Information": ["GOOGL", "META", "SNAP", "PINS", "YELP"],
+        # Gig economy / freelance / online staffing marketplaces
+        "Staffing & Employment Services":                  ["FVRR", "TASK", "KFRC", "RHI", "MAN"],
+        "Services-Computer Processing & Data Preparation": ["FVRR", "TASK", "KFRC", "RHI"],
+        # E-commerce / marketplace platforms
+        "Internet Retail":                 ["AMZN", "ETSY", "EBAY", "SHOP", "WISH"],
+        "E-Commerce":                      ["AMZN", "ETSY", "EBAY", "SHOP"],
         "default": ["AAPL", "MSFT", "GOOGL", "META", "AMZN"],
     },
     "Communication Services": {
@@ -671,7 +700,7 @@ def _get_sector_peers(ticker: str, sector: str, industry: str) -> list:
 
 
 def _fetch_competitor_metrics(t: str) -> Optional[dict]:
-    """Fetch key metrics for a competitor ticker."""
+    """Fetch key metrics for a competitor ticker. Falls back to yfinance if v10 is blocked."""
     crumb = _get_crumb()
     crumb_param = f"&crumb={crumb}" if crumb else ""
     r = _yf_get(
@@ -679,34 +708,65 @@ def _fetch_competitor_metrics(t: str) -> Optional[dict]:
         f"?modules=price,financialData,defaultKeyStatistics{crumb_param}",
         retries=2, delay=1.0,
     )
-    if not r:
-        return None
+    if r:
+        try:
+            qs = r.json()["quoteSummary"]["result"][0]
+            pr = qs.get("price", {})
+            fd = qs.get("financialData", {})
+            ks = qs.get("defaultKeyStatistics", {})
+            name = _safe(pr, "longName") or t
+            if name == "N/A":
+                name = t
+            pe = _safe(ks, "trailingPE")
+            if pe == "N/A":
+                pe = _safe(ks, "forwardPE")
+            return {
+                "name":           name,
+                "ticker":         t,
+                "market_cap":     _safe(pr, "marketCap", "fmt"),
+                "revenue":        _safe(fd, "totalRevenue", "fmt"),
+                "gross_margin":   _pct(_safe(fd, "grossMargins", "raw")),
+                "net_margin":     _pct(_safe(fd, "profitMargins", "raw")),
+                "pe_ratio":       str(pe),
+                "roe":            _pct(_safe(fd, "returnOnEquity", "raw")),
+                "revenue_growth": _pct(_safe(fd, "revenueGrowth", "raw")),
+            }
+        except Exception:
+            pass
+
+    # v10 blocked or failed — fall back to yfinance library
+    return _fetch_competitor_metrics_via_yf(t)
+
+
+def _fetch_competitor_metrics_via_yf(t: str) -> Optional[dict]:
+    """yfinance fallback for competitor metrics when YF v10 API is blocked (e.g. HuggingFace)."""
     try:
-        qs = r.json()["quoteSummary"]["result"][0]
-    except Exception:
+        import yfinance as yf
+        info = yf.Ticker(t).info
+        if not info or not info.get("regularMarketPrice"):
+            return None
+        name = info.get("longName") or info.get("shortName") or t
+        mktcap = info.get("marketCap")
+        rev    = info.get("totalRevenue")
+        gm     = info.get("grossMargins")
+        nm     = info.get("profitMargins")
+        pe_val = info.get("trailingPE") or info.get("forwardPE")
+        roe    = info.get("returnOnEquity")
+        rg     = info.get("revenueGrowth")
+        return {
+            "name":           name if name != "N/A" else t,
+            "ticker":         t,
+            "market_cap":     _fmt_large(mktcap) if mktcap else "N/A",
+            "revenue":        _fmt_large(rev) if rev else "N/A",
+            "gross_margin":   _pct_str(gm) if gm is not None else "N/A",
+            "net_margin":     _pct_str(nm) if nm is not None else "N/A",
+            "pe_ratio":       str(round(float(pe_val), 1)) if pe_val else "N/A",
+            "roe":            _pct_str(roe) if roe is not None else "N/A",
+            "revenue_growth": _pct_str(rg) if rg is not None else "N/A",
+        }
+    except Exception as e:
+        logger.debug(f"yfinance competitor fallback failed for {t}: {e}")
         return None
-
-    pr = qs.get("price", {})
-    fd = qs.get("financialData", {})
-    ks = qs.get("defaultKeyStatistics", {})
-
-    name = _safe(pr, "longName") or t
-    if name == "N/A":
-        name = t
-    pe = _safe(ks, "trailingPE")
-    if pe == "N/A":
-        pe = _safe(ks, "forwardPE")
-    return {
-        "name":           name,
-        "ticker":         t,
-        "market_cap":     _safe(pr, "marketCap", "fmt"),
-        "revenue":        _safe(fd, "totalRevenue", "fmt"),
-        "gross_margin":   _pct(_safe(fd, "grossMargins", "raw")),
-        "net_margin":     _pct(_safe(fd, "profitMargins", "raw")),
-        "pe_ratio":       str(pe),
-        "roe":            _pct(_safe(fd, "returnOnEquity", "raw")),
-        "revenue_growth": _pct(_safe(fd, "revenueGrowth", "raw")),
-    }
 
 
 def find_and_fetch_competitors(company_name: str, ticker: str, sector: str,
@@ -845,10 +905,22 @@ def fetch_recent_news(company_name: str, ticker: Optional[str] = None) -> list:
     items: list = []
     seen_titles: set = set()
 
-    def _add(raw_items: list):
+    # Build relevance tokens once — any of these appearing in a title means it's on-topic.
+    _company_words = [w for w in company_name.lower().split() if len(w) > 3]
+    _ticker_lower  = (ticker or "").lower()
+
+    def _is_relevant(title: str) -> bool:
+        t = title.lower()
+        if _ticker_lower and _ticker_lower in t:
+            return True
+        return any(w in t for w in _company_words)
+
+    def _add(raw_items: list, filter_relevance: bool = False):
         for item in raw_items:
             title = item.get("title", "").strip()
             if not title or title in seen_titles:
+                continue
+            if filter_relevance and not _is_relevant(title):
                 continue
             seen_titles.add(title)
             ts   = item.get("providerPublishTime") or item.get("date_ts", 0)
@@ -883,7 +955,7 @@ def fetch_recent_news(company_name: str, ticker: Optional[str] = None) -> list:
     crumb = _get_crumb()
     crumb_param = f"&crumb={crumb}" if crumb else ""
 
-    # 1. Yahoo Finance by ticker
+    # 1. Yahoo Finance by ticker — filter to on-topic headlines
     if ticker and len(items) < 10:
         r = _yf_get(
             f"https://query2.finance.yahoo.com/v1/finance/search"
@@ -891,11 +963,11 @@ def fetch_recent_news(company_name: str, ticker: Optional[str] = None) -> list:
         )
         if r:
             try:
-                _add(r.json().get("news", []))
+                _add(r.json().get("news", []), filter_relevance=True)
             except Exception:
                 pass
 
-    # 2. Yahoo Finance by company name (helps private companies)
+    # 2. Yahoo Finance by company name — filter to on-topic headlines
     if len(items) < 8:
         query = company_name.replace(" ", "+")
         r2 = _yf_get(
@@ -904,7 +976,7 @@ def fetch_recent_news(company_name: str, ticker: Optional[str] = None) -> list:
         )
         if r2:
             try:
-                _add(r2.json().get("news", []))
+                _add(r2.json().get("news", []), filter_relevance=True)
             except Exception:
                 pass
 
@@ -1422,6 +1494,11 @@ def get_financial_data(company_name: str) -> dict:
 
         # Merge YF + EDGAR annual data — EDGAR wins on historical depth
         annual = _merge_annual(yf_annual, edgar_annual)
+
+        # Append multi-year history so the LLM can build year-over-year tables
+        annual_text = _format_annual_for_llm(annual)
+        if annual_text:
+            formatted = formatted + "\n\n" + annual_text
 
         # Competitor detection
         sector      = raw_data.get("sector", "")
