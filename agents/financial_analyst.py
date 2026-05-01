@@ -668,6 +668,9 @@ _SECTOR_PEERS: dict = {
         "default": ["AAPL", "MSFT", "GOOGL", "META", "AMZN"],
     },
     "Communication Services": {
+        "Staffing & Employment Services":                  ["FVRR", "TASK", "KFRC", "RHI", "MAN"],
+        "Services-Computer Processing & Data Preparation": ["FVRR", "TASK", "KFRC", "RHI"],
+        "Internet Retail":  ["AMZN", "ETSY", "EBAY", "SHOP"],
         "default": ["GOOGL", "META", "NFLX", "DIS", "SPOT", "SNAP"],
     },
     "Consumer Cyclical": {
@@ -770,13 +773,14 @@ def _fetch_competitor_metrics_via_yf(t: str) -> Optional[dict]:
 
 
 def find_and_fetch_competitors(company_name: str, ticker: str, sector: str,
-                               industry: str = "") -> list:
+                               industry: str = "",
+                               target_mktcap_raw: float = 0) -> list:
     """
     Find up to 4 competitor tickers and fetch their metrics.
 
     Priority:
-    1. Yahoo Finance 'recommendationsbyticker' API (fast, no crumb)
-    2. Sector/industry-based curated peer list (reliable fallback)
+    1. Sector/industry-based curated peer list (most accurate)
+    2. Yahoo Finance 'recommendationsbyticker' API (supplement if <3 found)
     3. DDG search → /quote/TICKER URL pattern extraction
     Returns up to 4 competitor dicts.
     """
@@ -786,6 +790,27 @@ def find_and_fetch_competitors(company_name: str, ticker: str, sector: str,
     competitors: list = []
     found_tickers: set = {ticker.upper()}
 
+    def _mktcap_raw(m: dict) -> float:
+        """Extract raw market-cap number from a competitor metrics dict."""
+        mc = m.get("market_cap", "")
+        try:
+            s = str(mc).replace(",", "").strip()
+            mul = 1e12 if s.endswith("T") else (1e9 if s.endswith("B") else
+                  1e6 if s.endswith("M") else 1.0)
+            return float(s.rstrip("TBMKk")) * mul
+        except Exception:
+            return 0
+
+    def _is_reasonable_peer(m: dict) -> bool:
+        """Reject competitors whose market cap is >100x or <1/100x the target's."""
+        if not target_mktcap_raw:
+            return True
+        peer_mc = _mktcap_raw(m)
+        if not peer_mc:
+            return True
+        ratio = max(peer_mc, target_mktcap_raw) / min(peer_mc, target_mktcap_raw)
+        return ratio <= 100
+
     def _add_from_list(tickers: list, label: str):
         for t in tickers:
             if len(competitors) >= 4:
@@ -794,7 +819,7 @@ def find_and_fetch_competitors(company_name: str, ticker: str, sector: str,
                 continue
             found_tickers.add(t.upper())
             metrics = _fetch_competitor_metrics(t)
-            if metrics:
+            if metrics and _is_reasonable_peer(metrics):
                 competitors.append(metrics)
                 time.sleep(0.25)
         if competitors:
@@ -1503,9 +1528,16 @@ def get_financial_data(company_name: str) -> dict:
             formatted = formatted + "\n\n" + annual_text
 
         # Competitor detection
-        sector      = raw_data.get("sector", "")
-        industry    = raw_data.get("industry", "")
-        competitors = find_and_fetch_competitors(company_name, ticker, sector, industry)
+        sector          = raw_data.get("sector", "")
+        industry        = raw_data.get("industry", "")
+        mktcap_raw      = raw_data.get("market_cap_raw") or 0
+        try:
+            mktcap_raw = float(mktcap_raw)
+        except Exception:
+            mktcap_raw = 0
+        competitors = find_and_fetch_competitors(
+            company_name, ticker, sector, industry, target_mktcap_raw=mktcap_raw
+        )
 
         logger.info(
             f"Financial data: qs={bool(qs)}, hist={bool(hist)}, "
