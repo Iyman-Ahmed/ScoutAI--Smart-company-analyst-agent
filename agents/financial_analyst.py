@@ -674,27 +674,75 @@ _SECTOR_PEERS: dict = {
         "default": ["GOOGL", "META", "NFLX", "DIS", "SPOT", "SNAP"],
     },
     "Consumer Cyclical": {
+        "Auto Manufacturers": ["F", "GM", "TM", "HMC", "STLA"],
+        "Restaurants": ["MCD", "SBUX", "CMG", "DPZ", "YUM"],
+        "Specialty Retail": ["HD", "LOW", "TJX", "ROST", "BBY"],
         "default": ["AMZN", "TSLA", "NKE", "SBUX", "MCD"],
     },
+    "Consumer Defensive": {
+        "Beverages—Non-Alcoholic": ["KO", "PEP", "MNST", "KDP", "CELH"],
+        "Beverages—Alcoholic": ["DEO", "BUD", "STZ", "SAM", "MGPI"],
+        "Grocery Stores": ["KR", "WMT", "COST", "SFM", "GO"],
+        "Household & Personal Products": ["PG", "CL", "KMB", "CHD", "EL"],
+        "default": ["WMT", "PG", "KO", "PEP", "COST"],
+    },
     "Financial Services": {
+        "Banks—Diversified": ["JPM", "BAC", "WFC", "C", "USB"],
+        "Capital Markets": ["GS", "MS", "SCHW", "BLK", "ICE"],
+        "Insurance—Life": ["MET", "PRU", "AFL", "LNC", "UNM"],
+        "Insurance—Property & Casualty": ["PGR", "ALL", "TRV", "CB", "HIG"],
+        "Credit Services": ["V", "MA", "AXP", "DFS", "COF"],
+        "Asset Management": ["BLK", "BEN", "IVZ", "AMG", "APAM"],
         "default": ["JPM", "BAC", "GS", "MS", "V", "MA"],
     },
     "Healthcare": {
+        "Drug Manufacturers—General": ["JNJ", "PFE", "MRK", "ABBV", "LLY"],
+        "Biotechnology": ["AMGN", "GILD", "BIIB", "REGN", "VRTX"],
+        "Medical Devices": ["MDT", "ABT", "SYK", "BSX", "EW"],
+        "Healthcare Plans": ["UNH", "CVS", "CI", "HUM", "CNC"],
         "default": ["JNJ", "PFE", "ABBV", "MRK", "UNH"],
     },
     "Industrials": {
+        "Aerospace & Defense": ["BA", "LMT", "RTX", "NOC", "GD"],
+        "Specialty Industrial Machinery": ["HON", "MMM", "EMR", "ROK", "ETN"],
+        "Staffing & Employment Services": ["MAN", "RHI", "KFRC", "TBI", "HURN"],
         "default": ["GE", "HON", "BA", "CAT", "MMM"],
     },
     "Energy": {
+        "Oil & Gas Integrated": ["XOM", "CVX", "BP", "SHEL", "TTE"],
+        "Oil & Gas E&P": ["COP", "EOG", "DVN", "PXD", "MRO"],
         "default": ["XOM", "CVX", "COP", "BP", "SHEL"],
     },
-    "default": ["MSFT", "AAPL", "GOOGL", "AMZN", "META"],
+    "Basic Materials": {
+        "Specialty Chemicals": ["LIN", "APD", "ECL", "PPG", "SHW"],
+        "Steel": ["NUE", "STLD", "CLF", "RS", "CMC"],
+        "default": ["LIN", "NUE", "FCX", "NEM", "APD"],
+    },
+    "Real Estate": {
+        "REIT—Retail": ["SPG", "O", "KIM", "REG", "BRX"],
+        "REIT—Residential": ["EQR", "AVB", "ESS", "MAA", "UDR"],
+        "REIT—Office": ["BXP", "SLG", "VNO", "CUZ", "KRC"],
+        "default": ["AMT", "PLD", "CCI", "EQIX", "O"],
+    },
+    "Utilities": {
+        "Utilities—Regulated Electric": ["NEE", "DUK", "SO", "AEP", "EXC"],
+        "Utilities—Renewable": ["NEE", "BEP", "CWEN", "AES", "BEPC"],
+        "default": ["NEE", "DUK", "SO", "AEP", "D"],
+    },
 }
 
 
 def _get_sector_peers(ticker: str, sector: str, industry: str) -> list:
-    """Return curated peer tickers based on sector/industry."""
-    sector_map = _SECTOR_PEERS.get(sector, _SECTOR_PEERS["default"])
+    """Return curated peer tickers based on sector/industry.
+
+    Returns empty list if sector is unknown so the caller falls through
+    to YF recommendations / DDG rather than using a generic default.
+    """
+    if not sector or sector in ("N/A", "None"):
+        return []
+    sector_map = _SECTOR_PEERS.get(sector)
+    if sector_map is None:
+        return []
     if isinstance(sector_map, dict):
         peers = sector_map.get(industry, sector_map.get("default", []))
     else:
@@ -746,7 +794,7 @@ def _fetch_competitor_metrics_via_yf(t: str) -> Optional[dict]:
     try:
         import yfinance as yf
         info = yf.Ticker(t).info
-        if not info or not info.get("regularMarketPrice"):
+        if not info or not (info.get("regularMarketPrice") or info.get("currentPrice")):
             return None
         name = info.get("longName") or info.get("shortName") or t
         mktcap = info.get("marketCap")
