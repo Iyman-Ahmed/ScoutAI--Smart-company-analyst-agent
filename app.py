@@ -833,92 +833,6 @@ def build_trader_scorecard(raw_financial: dict) -> str:
     )
 
 
-# ─── Competitor Comparison Table ──────────────────────────────────────────────
-
-def build_competitor_table_html(raw_financial: dict, company_name: str) -> str:
-    rd          = raw_financial.get("raw_data", {})
-    competitors = raw_financial.get("competitors", [])
-    is_pub      = raw_financial.get("is_public", False)
-
-    if not is_pub or not rd:
-        return (
-            "<div style='padding:8px 0'>"
-            "<h3 style='font-size:15px;font-weight:700;color:#F1F5F9;margin:0 0 10px 0;"
-            "padding-bottom:8px;border-bottom:2px solid #334155'>⚔️ Competitor Comparison</h3>"
-            "<div style='padding:14px 16px;background:#2D1B00;border-left:4px solid #F97316;"
-            "border-radius:6px;font-size:13px;color:#FED7AA'>"
-            "🔒 Competitor comparison is only available for publicly traded companies. "
-            "Qualitative competitive analysis is available in the <em>Full AI Report</em> section below."
-            "</div></div>"
-        )
-
-    ticker = rd.get("ticker", "")
-
-    def _row(name, tk, mktcap, rev, gm, nm, pe, roe, rev_growth, highlight=False):
-        if highlight:
-            bg   = "#2D1B69"
-            fw   = "700"
-            bord = "border-left:3px solid #A78BFA;"
-        else:
-            bg   = "#1E293B"
-            fw   = "500"
-            bord = "border-left:3px solid transparent;"
-        base = (f"padding:9px 12px;border-bottom:1px solid #334155;"
-                f"color:#E2E8F0;font-size:13px;background:{bg};font-weight:{fw};")
-        cells = [name, tk, mktcap, rev, gm, nm, pe, roe, rev_growth]
-        tds_parts = []
-        for i, c in enumerate(cells):
-            cell_bord = bord if i == 0 else ""
-            tds_parts.append(f"<td style='{base}{cell_bord}'>{c}</td>")
-        return "<tr>" + "".join(tds_parts) + "</tr>"
-
-    head_cols = ["Company", "Ticker", "Market Cap", "Revenue", "Gross Margin",
-                 "Net Margin", "P/E", "ROE", "Rev Growth"]
-    header = "".join(
-        f"<th style='padding:9px 12px;background:#0F172A;font-size:10.5px;font-weight:700;"
-        f"color:#94A3B8;text-transform:uppercase;letter-spacing:.6px;"
-        f"border-bottom:2px solid #4C1D95;text-align:left;white-space:nowrap'>{h}</th>"
-        for h in head_cols
-    )
-
-    rows = [_row(
-        rd.get("company_name", company_name), ticker,
-        rd.get("market_cap", "N/A"), rd.get("revenue_ttm", "N/A"),
-        rd.get("gross_margin", "N/A"), rd.get("profit_margin", "N/A"),
-        str(rd.get("pe_ratio", "N/A")), rd.get("roe", "N/A"),
-        rd.get("revenue_growth_yoy", "N/A"),
-        highlight=True,
-    )]
-
-    for c in competitors:
-        rows.append(_row(
-            c.get("name", "N/A"), c.get("ticker", ""),
-            c.get("market_cap", "N/A"), c.get("revenue", "N/A"),
-            c.get("gross_margin", "N/A"), c.get("net_margin", "N/A"),
-            c.get("pe_ratio", "N/A"), c.get("roe", "N/A"),
-            c.get("revenue_growth", "N/A"),
-        ))
-
-    if not competitors:
-        rows.append(
-            "<tr><td colspan='9' style='padding:14px 12px;text-align:center;color:#64748B;"
-            "font-size:12px;font-style:italic;background:#1E293B'>"
-            "Yahoo Finance peer data not available for this ticker — "
-            "see the <strong>Full AI Report</strong> section below for qualitative analysis."
-            "</td></tr>"
-        )
-
-    return (
-        "<div style='padding:8px 0;overflow-x:auto'>"
-        "<h3 style='font-size:15px;font-weight:700;color:#F1F5F9;margin:0 0 10px 0;"
-        "padding-bottom:8px;border-bottom:2px solid #334155'>⚔️ Competitor Comparison</h3>"
-        f"<table style='width:100%;border-collapse:collapse;font-size:13px'>"
-        f"<thead><tr>{header}</tr></thead>"
-        f"<tbody>{''.join(rows)}</tbody>"
-        "</table></div>"
-    )
-
-
 # ─── News Card Builder ────────────────────────────────────────────────────────
 
 def build_news_html(news_items: list) -> str:
@@ -1072,7 +986,6 @@ def analyze_company(url: str, groq_api_key: str, progress=gr.Progress(track_tqdm
     margin_fig       = build_margin_chart(raw_fin, company_name)
     metrics_html     = build_metrics_html(raw_fin)
     health_html      = build_health_html(raw_fin)
-    comp_html        = build_competitor_table_html(raw_fin, company_name)
     news_html        = build_news_html(news_items)
     trader_scorecard = build_trader_scorecard(raw_fin)
 
@@ -1106,11 +1019,10 @@ def analyze_company(url: str, groq_api_key: str, progress=gr.Progress(track_tqdm
         fcf_fig,          # 5
         margin_fig,       # 6
         health_html,      # 7
-        comp_html,        # 8
-        news_html,        # 9
-        trader_scorecard, # 10
-        report,           # 11  ← full LLM report
-        download_path,    # 12
+        news_html,        # 8
+        trader_scorecard, # 9
+        report,           # 10  ← full LLM report
+        download_path,    # 11
     )
 
 
@@ -1312,9 +1224,8 @@ with gr.Blocks(css=CSS, title="ScoutAI — Smart Company Analyst Agent") as demo
     # Trader Scorecard (signal chips + key trade metrics)
     trader_scorecard_out = gr.HTML(value="")
 
-    # Balance sheet health + competitor table
+    # Balance sheet health
     health_html_out = gr.HTML(value="")
-    comp_html_out   = gr.HTML(value="")
 
     # News cards
     news_html_out = gr.HTML(value="")
@@ -1392,11 +1303,10 @@ with gr.Blocks(css=CSS, title="ScoutAI — Smart Company Analyst Agent") as demo
         trends_plot,         # 5  FCF chart
         margin_plot,         # 6  Margin expansion
         health_html_out,     # 7  Balance sheet health
-        comp_html_out,       # 8  Competitor table
-        news_html_out,       # 9  News cards
-        trader_scorecard_out,# 10 Trader scorecard
-        full_report_md,      # 11 Full LLM report
-        download_btn,        # 12
+        news_html_out,       # 8  News cards
+        trader_scorecard_out,# 9  Trader scorecard
+        full_report_md,      # 10 Full LLM report
+        download_btn,        # 11
     ]
 
     analyze_btn.click(fn=analyze_company, inputs=[url_input, api_key_input], outputs=_outputs)
