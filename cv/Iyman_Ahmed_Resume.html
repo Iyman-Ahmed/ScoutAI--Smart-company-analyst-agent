@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Iyman Ahmed — Resume</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Georgia', 'Times New Roman', serif;
+            font-size: 10.5pt;
+            color: #1a1a1a;
+            background: #fff;
+            max-width: 860px;
+            margin: 0 auto;
+            padding: 40px 52px;
+            line-height: 1.45;
+        }
+
+        /* ── Header ── */
+        .header { text-align: center; margin-bottom: 18px; }
+
+        .header h1 {
+            font-family: 'Arial', sans-serif;
+            font-size: 22pt;
+            font-weight: 700;
+            letter-spacing: 2.5px;
+            text-transform: uppercase;
+            color: #1a1a1a;
+            margin-bottom: 7px;
+        }
+
+        .contact-line { font-family: 'Arial', sans-serif; font-size: 9pt; color: #333; }
+        .contact-line a { color: #1a4f8a; text-decoration: none; }
+        .contact-line a:hover { text-decoration: underline; }
+        .contact-line .sep { margin: 0 6px; color: #999; }
+
+        /* ── Section ── */
+        .section { margin-bottom: 14px; }
+
+        .section-title {
+            font-family: 'Arial', sans-serif;
+            font-size: 9.5pt;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            color: #1a4f8a;
+            border-bottom: 1.5px solid #1a4f8a;
+            padding-bottom: 2px;
+            margin-bottom: 8px;
+        }
+
+        /* ── Summary ── */
+        .summary p { font-size: 10pt; line-height: 1.5; }
+
+        /* ── Education ── */
+        .edu-entry { margin-bottom: 6px; }
+        .edu-row { display: flex; justify-content: space-between; align-items: baseline; }
+        .edu-degree { font-family: 'Arial', sans-serif; font-weight: 700; font-size: 10.5pt; }
+        .edu-date { font-family: 'Arial', sans-serif; font-size: 9.5pt; color: #333; white-space: nowrap; margin-left: 10px; }
+        .edu-sub { font-style: italic; font-size: 9.5pt; color: #333; margin-top: 1px; }
+
+        /* ── Skills ── */
+        .skills-row { margin-bottom: 3px; font-size: 10pt; }
+        .skills-row strong { font-family: 'Arial', sans-serif; }
+
+        /* ── Experience ── */
+        .exp-entry { margin-bottom: 10px; }
+        .exp-header { display: flex; justify-content: space-between; align-items: baseline; }
+        .exp-title { font-family: 'Arial', sans-serif; font-weight: 700; font-size: 10.5pt; }
+        .exp-date { font-family: 'Arial', sans-serif; font-size: 9.5pt; color: #333; white-space: nowrap; margin-left: 10px; }
+
+        .exp-bullets { list-style: disc; padding-left: 18px; margin-top: 4px; }
+        .exp-bullets li { font-size: 10pt; margin-bottom: 2px; line-height: 1.45; }
+
+        /* ── Projects ── */
+        .project-entry { margin-bottom: 10px; }
+        .project-name { font-family: 'Arial', sans-serif; font-weight: 700; font-size: 10.5pt; }
+        .project-name a { color: #1a4f8a; text-decoration: none; }
+        .project-name a:hover { text-decoration: underline; }
+        .project-stack { font-style: italic; font-size: 9.5pt; color: #444; margin: 2px 0 4px 0; }
+
+        .project-bullets { list-style: disc; padding-left: 18px; }
+        .project-bullets li { font-size: 10pt; margin-bottom: 2px; line-height: 1.45; }
+
+        @media print {
+            body { padding: 20px 30px; }
+            a { color: #1a4f8a !important; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ══════════════════ HEADER ══════════════════ -->
+<div class="header">
+    <h1>Iyman Ahmed</h1>
+    <div class="contact-line">
+        San Francisco, CA
+        <span class="sep">•</span>
+        <a href="mailto:contact@iyman-ahmed.tech">contact@iyman-ahmed.tech</a>
+        <span class="sep">•</span>
+        <a href="https://linkedin.com/in/iyman-ahmed" target="_blank">LinkedIn</a>
+        <span class="sep">•</span>
+        <a href="https://github.com/Iyman-Ahmed" target="_blank">GitHub</a>
+        <span class="sep">•</span>
+        <a href="https://iyman-ahmed.tech" target="_blank">iyman-ahmed.tech</a>
+        <span class="sep">•</span>
+        <a href="https://huggingface.co/Iyman-ahmed" target="_blank">Hugging Face</a>
+    </div>
+</div>
+
+<!-- ══════════════════ SUMMARY ══════════════════ -->
+<div class="section summary">
+    <div class="section-title">Summary</div>
+    <p>AI Engineer focused on building full-stack AI applications that connect LLMs, retrieval systems, backend APIs, and user interfaces. Experienced with RAG pipelines, multi-step agent workflows, vector search, model evaluation, and deployment. Backed by an MSc in Artificial Intelligence and internship experience across analytics, machine learning, and workflow automation. Open to AI, ML, GenAI, and data-focused roles.</p>
+</div>
+
+<!-- ══════════════════ EDUCATION ══════════════════ -->
+<div class="section">
+    <div class="section-title">Education</div>
+
+    <div class="edu-entry">
+        <div class="edu-row">
+            <span class="edu-degree">MSc Artificial Intelligence Strategy — Brunel University London, UK</span>
+            <span class="edu-date">Jan 2022 – Jul 2023</span>
+        </div>
+        <div class="edu-sub">Research: Neural Networks &amp; Cancer Imaging · Ethics, Bias &amp; Fairness in ML</div>
+    </div>
+
+    <div class="edu-entry">
+        <div class="edu-row">
+            <span class="edu-degree">BSc Computer Science — Bahria University, Karachi, PK</span>
+            <span class="edu-date">Sep 2017 – Aug 2021</span>
+        </div>
+        <div class="edu-sub">Capstone: Autonomous Drone for Security Surveillance Using Motion Sensing Nodes</div>
+    </div>
+</div>
+
+<!-- ══════════════════ SKILLS ══════════════════ -->
+<div class="section">
+    <div class="section-title">Technical Skills</div>
+    <div class="skills-row"><strong>AI / LLM:</strong> GPT-4, Claude, Llama 3, LangChain, LangGraph, RAG, Prompt Engineering, ChromaDB, Pinecone, Sentence Transformers, RAGAS</div>
+    <div class="skills-row"><strong>ML / Data:</strong> Python, SQL, PyTorch, TensorFlow, Hugging Face, XGBoost, BERT, CNNs, scikit-learn, Pandas, NumPy, SHAP, Optuna</div>
+    <div class="skills-row"><strong>Deployment:</strong> FastAPI, Streamlit, Gradio, Docker, REST APIs, GitHub Actions, Hugging Face Spaces, Power BI, Tableau, BigQuery</div>
+</div>
+
+<!-- ══════════════════ EXPERIENCE ══════════════════ -->
+<div class="section">
+    <div class="section-title">Experience</div>
+
+    <div class="exp-entry">
+        <div class="exp-header">
+            <span class="exp-title">Data Analyst Intern — LMP Groups, London, UK</span>
+            <span class="exp-date">Mar 2025 – May 2025</span>
+        </div>
+        <ul class="exp-bullets">
+            <li>Built Power BI dashboards tracking 15+ KPIs across business teams, improving visibility into operational and performance reporting.</li>
+            <li>Wrote SQL and BigQuery queries to analyze 500K+ records for analytics, operations, and reporting use cases.</li>
+            <li>Developed a GPT-4 and LangChain document summarization prototype to help the analytics team review internal documents faster.</li>
+            <li>Benchmarked embedding models (OpenAI, Cohere, BGE-M3) to evaluate retrieval quality vs. API cost trade-offs, informing the team's production stack decision.</li>
+        </ul>
+    </div>
+
+    <div class="exp-entry">
+        <div class="exp-header">
+            <span class="exp-title">ML Engineer Intern — The Sparks Foundation, Karachi, PK</span>
+            <span class="exp-date">Nov 2021 – Jan 2022</span>
+        </div>
+        <ul class="exp-bullets">
+            <li>Built machine learning models for credit scoring, churn prediction, and customer segmentation using Python and scikit-learn.</li>
+            <li>Engineered 25+ features from customer behavioral and transactional data to support model training and evaluation.</li>
+            <li>Tuned models via cross-validation and Optuna hyperparameter optimization, improving prediction performance across multiple iterations.</li>
+            <li>Automated data preparation and reporting workflows using Python scripts, reducing manual prep time significantly.</li>
+        </ul>
+    </div>
+</div>
+
+<!-- ══════════════════ PROJECTS ══════════════════ -->
+<div class="section">
+    <div class="section-title">Projects</div>
+
+    <!-- RecruitIQ -->
+    <div class="project-entry">
+        <div class="project-name">
+            <!-- TODO: replace with your live RecruitIQ HF Space or GitHub URL -->
+            <a href="https://github.com/Iyman-Ahmed" target="_blank">RecruitIQ — AI Resume Ranking Agent →</a>
+        </div>
+        <div class="project-stack">LangChain · Groq LLaMA-3.3-70b · ChromaDB · FastAPI · Next.js · Docker · Hugging Face Spaces</div>
+        <ul class="project-bullets">
+            <li>Architected a 5-agent LangChain pipeline powered by Groq LLaMA-3.3-70b that performs structured PDF extraction, semantic job description decomposition, and multi-dimensional candidate scoring across skills, experience, keyword alignment, and education — delivering real-time SSE-streamed results with a 4-tier match classification (Strong / Good / Potential / Weak) per candidate.</li>
+            <li>Incorporates ATS compliance scoring, per-candidate skill gap analysis, and structured strengths/weaknesses breakdowns; containerized with Docker and deployed on Hugging Face Spaces with an async FastAPI backend and Next.js SSR frontend.</li>
+        </ul>
+    </div>
+
+    <!-- ScoutAI -->
+    <div class="project-entry">
+        <div class="project-name">
+            <a href="https://huggingface.co/spaces/Iyman-ahmed/ScoutAI-Smart-company-analyst-agent" target="_blank">ScoutAI — Smart Company Analyst Agent →</a>
+        </div>
+        <div class="project-stack">LangGraph · Groq LLM · SEC EDGAR · Yahoo Finance · Playwright · Gradio</div>
+        <ul class="project-bullets">
+            <li>Engineered a stateful LangGraph multi-agent pipeline with three specialized agents — a Playwright + curl_cffi web scraper, a SEC EDGAR / Yahoo Finance financial data agent, and a Groq LLM synthesizer — producing investment-grade reports featuring 12 quantitative metric cards, dynamic stock charts, and competitor benchmarking tables in under 90 seconds end-to-end.</li>
+            <li>Implements deterministic fallback logic via DuckDuckGo search and Chrome-impersonated web scraping to maintain full data coverage for private and non-US entities with no dead-ends; deployed live on Hugging Face Spaces.</li>
+        </ul>
+    </div>
+
+    <!-- AI Legal Contract Analyzer -->
+    <div class="project-entry">
+        <div class="project-name">
+            <!-- TODO: replace with your live AI Legal Analyzer HF Space or GitHub URL -->
+            <a href="https://github.com/Iyman-Ahmed" target="_blank">AI Legal Contract Analyzer →</a>
+        </div>
+        <div class="project-stack">RAG · ChromaDB · BM25 · BGE Embeddings · Cross-Encoder Reranking · Claude Sonnet · Gradio</div>
+        <ul class="project-bullets">
+            <li>Engineered a production-grade hybrid RAG pipeline for automated legal contract risk analysis, benchmarked at 90% clause detection precision, 96.8% recall, and a 100% retrieval hit rate (266/266 queries) across 50 heterogeneous test contracts.</li>
+            <li>Implemented a dual-retrieval stack combining BM25 sparse search and BGE dense embeddings fused via Reciprocal Rank Fusion (RRF), followed by cross-encoder reranking and Claude Sonnet for clause-level risk classification with source citations; validated by a 91-test suite covering ingestion, retrieval accuracy, guardrails, and end-to-end correctness; deployed on Hugging Face Spaces.</li>
+        </ul>
+    </div>
+
+    <!-- Cancer Imaging CNN -->
+    <div class="project-entry">
+        <div class="project-name">
+            <!-- TODO: replace with your MSc research repo or paper URL if available -->
+            <a href="https://github.com/Iyman-Ahmed" target="_blank">Cancer Imaging CNN — MSc Research →</a>
+        </div>
+        <div class="project-stack">PyTorch · CNN · SHAP · Histopathology · Bias &amp; Fairness Analysis</div>
+        <ul class="project-bullets">
+            <li>Developed a custom PyTorch CNN for multi-class histopathological cancer cell classification on whole-slide image patches; integrated SHAP (SHapley Additive exPlanations) for post-hoc model interpretability and conducted systematic demographic subgroup bias audits as part of MSc AI research at Brunel University.</li>
+        </ul>
+    </div>
+
+</div>
+
+</body>
+</html>
