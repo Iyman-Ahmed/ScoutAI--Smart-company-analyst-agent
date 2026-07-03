@@ -29,3 +29,5 @@ huggingface_hub>=0.25.2
 # Utilities
 python-dotenv>=1.0.0
 tldextract>=5.1.0
+# defusedxml: safe parsing of untrusted RSS/XML (Google News feed) — blocks XXE / billion-laughs
+defusedxml>=0.7.1

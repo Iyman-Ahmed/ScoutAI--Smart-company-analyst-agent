@@ -1,0 +1,61 @@
+name: eval-and-precompute
+
+# Council Phase 3: free CI on GitHub Actions (unlimited minutes for public repos).
+#  - `eval` gates changes on the integration tests that were documented but missing.
+#  - `precompute` warms the cache nightly from datacenter-IP-tolerant sources only.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * *"   # 06:00 UTC nightly
+  workflow_dispatch:
+
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Public-company eval
+        run: python eval/run_eval.py
+      - name: Startup / private-company eval
+        run: python eval/startup_eval.py
+      - name: Upload eval results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results
+          path: eval/*.json
+
+  precompute:
+    # Only on the nightly schedule (and manual trigger) — not on every push/PR.
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Warm cache (EDGAR / Wikipedia / GitHub / HN only)
+        run: python scripts/precompute.py
+      - name: Upload warmed cache
+        uses: actions/upload-artifact@v4
+        with:
+          name: precompute-warm
+          path: precompute/warm.json
+      # Production target: push precompute/warm.json to a free HuggingFace Dataset repo
+      # (needs a write-scoped HF_TOKEN secret) so the Space reads it at boot. Left as a
+      # documented follow-up rather than wired blind, per the council red-team.

@@ -1,0 +1,128 @@
+{
+ "run_at": "2026-07-03T17:52:33.488445+00:00",
+ "overall_accuracy_pct": 100.0,
+ "total_pass": 13,
+ "total_cases": 13,
+ "suites": {
+  "ticker_resolution": {
+   "cases": [
+    {
+     "company": "Apple",
+     "expected": "AAPL",
+     "got": "AAPL",
+     "status": "PASS",
+     "latency_s": 0.78,
+     "error": null
+    },
+    {
+     "company": "Microsoft",
+     "expected": "MSFT",
+     "got": "MSFT",
+     "status": "PASS",
+     "latency_s": 0.22,
+     "error": null
+    },
+    {
+     "company": "Nvidia",
+     "expected": "NVDA",
+     "got": "NVDA",
+     "status": "PASS",
+     "latency_s": 0.2,
+     "error": null
+    },
+    {
+     "company": "Tesla",
+     "expected": "TSLA",
+     "got": "TSLA",
+     "status": "PASS",
+     "latency_s": 0.19,
+     "error": null
+    },
+    {
+     "company": "Amazon",
+     "expected": "AMZN",
+     "got": "AMZN",
+     "status": "PASS",
+     "latency_s": 0.17,
+     "error": null
+    }
+   ]
+  },
+  "financial_fields": {
+   "cases": [
+    {
+     "company": "Apple",
+     "expected": "public+revenue",
+     "got": "ticker=AAPL,rev=True",
+     "status": "PASS",
+     "latency_s": 4.53,
+     "error": null
+    },
+    {
+     "company": "Microsoft",
+     "expected": "public+revenue",
+     "got": "ticker=MSFT,rev=True",
+     "status": "PASS",
+     "latency_s": 5.06,
+     "error": null
+    }
+   ]
+  },
+  "structured_feeds": {
+   "cases": [
+    {
+     "company": "company_profile",
+     "expected": "ok|empty",
+     "got": "ok (n=2)",
+     "status": "PASS",
+     "latency_s": 0.45,
+     "error": null
+    },
+    {
+     "company": "sec_8k",
+     "expected": "ok|empty",
+     "got": "ok (n=6)",
+     "status": "PASS",
+     "latency_s": 0.23,
+     "error": null
+    },
+    {
+     "company": "google_news",
+     "expected": "ok|empty",
+     "got": "ok (n=8)",
+     "status": "PASS",
+     "latency_s": 0.58,
+     "error": null
+    },
+    {
+     "company": "github",
+     "expected": "ok|empty",
+     "got": "ok (n=1)",
+     "status": "PASS",
+     "latency_s": 0.36,
+     "error": null
+    },
+    {
+     "company": "hacker_news",
+     "expected": "ok|empty",
+     "got": "ok (n=5)",
+     "status": "PASS",
+     "latency_s": 0.33,
+     "error": null
+    }
+   ]
+  },
+  "entity_gate": {
+   "cases": [
+    {
+     "company": "Apple\u2192Apple Inc.",
+     "expected": "verified company match",
+     "got": "ok",
+     "status": "PASS",
+     "latency_s": 0.0,
+     "error": null
+    }
+   ]
+  }
+ }
+}

@@ -182,7 +182,7 @@ def _ddg_find_website(company_name: str) -> Optional[str]:
     return None
 
 
-def scrape_website(url: str) -> dict:
+def scrape_website(url: str, deadline=None) -> dict:
     """
     Main entry point for the web scraper agent.
     Accepts either a real URL (https://nvidia.com) or a guessed slug URL
@@ -191,7 +191,13 @@ def scrape_website(url: str) -> dict:
       - company_name: guessed from title/meta
       - pages: list of {url, title, content}
       - combined_text: all page text joined
+
+    `deadline` (agents.deadline.Deadline) is checked cooperatively in the page-crawl
+    loop so a slow site can't blow the pipeline's overall budget; partial pages are
+    still returned.
     """
+    from agents.deadline import as_deadline
+    dl = as_deadline(deadline, 90)
     url = _normalize_url(url)
     session = cffi_requests.Session(impersonate="chrome131")
     scraped = []
@@ -243,6 +249,9 @@ def scrape_website(url: str) -> dict:
     # --- Step 3: Scrape top relevant pages ---
     for page_url in all_links:
         if len(scraped) >= MAX_PAGES_TO_SCRAPE:
+            break
+        if dl.expired():
+            logger.info(f"Web scraper hit deadline after {len(scraped)} pages; returning partial.")
             break
         if page_url in visited:
             continue

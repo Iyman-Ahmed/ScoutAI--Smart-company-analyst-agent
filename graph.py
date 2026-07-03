@@ -17,9 +17,9 @@ Defines the multi-agent pipeline as a state graph:
   [END]
 """
 
-import asyncio
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor, wait as futures_wait
 from typing import TypedDict
 from urllib.parse import urlparse
 
@@ -27,10 +27,15 @@ from langgraph.graph import StateGraph, END
 
 from agents.web_scraper import scrape_website
 from agents.external_researcher import research_external
-from agents.financial_analyst import get_financial_data
+from agents.financial_analyst import get_financial_data, reset_session as reset_financial_session
 from agents.synthesizer import synthesize_report
+from agents.deadline import Deadline
 
 logger = logging.getLogger(__name__)
+
+# Wall-clock budget for the whole parallel gather phase. Agents check this
+# cooperatively; the executor backstop is a few seconds beyond it.
+GATHER_BUDGET_SECONDS = 100
 
 
 # ─── State Definition ────────────────────────────────────────────────────────
@@ -49,6 +54,8 @@ class AgentState(TypedDict):
     raw_financial: dict     # chart-ready: ticker, stock_history, quarterly, raw_data
     news_items: list        # recent news/deals from Yahoo Finance / DDG
     pages_scraped: int
+    research_evidence: list  # list[Evidence] — provenance-tagged facts for citations
+    source_status: dict      # {source_name: "ok"|"empty"|"failed:reason"}
 
     # Output
     final_report: str
@@ -110,8 +117,13 @@ def extract_company_info(state: AgentState) -> AgentState:
 
 def gather_all_data(state: AgentState) -> AgentState:
     """
-    Run web scraper, external researcher, and financial analyst in parallel.
-    Falls back to sequential if async is unavailable.
+    Run web scraper, external researcher, and financial analyst in parallel under a
+    shared wall-clock deadline. Each agent checks the deadline cooperatively; the
+    executor backstop below only bounds the wait — it cannot kill a wedged thread,
+    so on timeout we detach the shared financial session (reset_financial_session)
+    to stop a zombie thread corrupting it, and we return PARTIAL results rather than
+    re-running everything (the old sequential-rerun path doubled load exactly when
+    rate-limited).
     """
     url = state["url"]
     company_name = state["company_name"]
@@ -119,51 +131,50 @@ def gather_all_data(state: AgentState) -> AgentState:
     progress = state.get("progress", [])
     errors = state.get("errors", [])
 
-    async def _run_parallel():
-        loop = asyncio.get_event_loop()
-        web_task = loop.run_in_executor(None, scrape_website, url)
-        ext_task = loop.run_in_executor(None, research_external, company_name, domain)
-        fin_task = loop.run_in_executor(None, get_financial_data, company_name)
-        return await asyncio.gather(web_task, ext_task, fin_task, return_exceptions=True)
+    dl = Deadline(GATHER_BUDGET_SECONDS)
+    empty_web = {"company_name": company_name, "pages": [], "combined_text": "", "pages_scraped": 0}
+    empty_ext = {"combined_text": "", "evidence": [], "source_status": {}}
+    empty_fin = {"combined_text": "", "news_items": []}
 
-    try:
-        # Try to run parallel
+    # Single thread-based executor works whether or not we're inside an event loop.
+    executor = ThreadPoolExecutor(max_workers=3)
+    futures = {
+        "web":      executor.submit(scrape_website, url, dl),
+        "external": executor.submit(research_external, company_name, domain, dl),
+        "financial": executor.submit(get_financial_data, company_name, dl),
+    }
+    # Backstop a few seconds past the cooperative deadline for well-behaved agents to finish.
+    futures_wait(futures.values(), timeout=GATHER_BUDGET_SECONDS + 10)
+
+    def _collect(name, fallback):
+        fut = futures[name]
+        if not fut.done():
+            errors.append(f"{name} timed out after {GATHER_BUDGET_SECONDS}s — partial results used.")
+            logger.warning(f"{name} agent exceeded deadline; using partial/empty result.")
+            return fallback, "failed:timeout"
         try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            loop = None
+            return fut.result(), "ok"
+        except Exception as e:
+            errors.append(f"{name} error: {e}")
+            logger.error(f"{name} agent raised: {e}")
+            return fallback, f"failed:{type(e).__name__}"
 
-        if loop and loop.is_running():
-            # Already inside an event loop (e.g. Jupyter / Gradio async context)
-            # Use concurrent.futures instead
-            from concurrent.futures import ThreadPoolExecutor
-            with ThreadPoolExecutor(max_workers=3) as executor:
-                web_future = executor.submit(scrape_website, url)
-                ext_future = executor.submit(research_external, company_name, domain)
-                fin_future = executor.submit(get_financial_data, company_name)
-                web_result = web_future.result()
-                ext_result = ext_future.result()
-                fin_result = fin_future.result()
-        else:
-            # No running loop — use asyncio.run
-            web_result, ext_result, fin_result = asyncio.run(_run_parallel())
+    web_result, web_state = _collect("web", empty_web)
+    ext_result, ext_state = _collect("external", empty_ext)
+    fin_result, fin_state = _collect("financial", empty_fin)
 
-    except Exception as e:
-        logger.error(f"Parallel execution failed, falling back to sequential: {e}")
-        web_result = scrape_website(url)
-        ext_result = research_external(company_name, domain)
-        fin_result = get_financial_data(company_name)
+    # A timed-out worker can't be killed; detach the shared curl_cffi session so it
+    # can't be used concurrently by the zombie thread and the next request.
+    if fin_state.startswith("failed"):
+        reset_financial_session()
+    # Don't block the pipeline waiting for zombie threads.
+    executor.shutdown(wait=False)
 
-    # Handle exceptions from gather
-    if isinstance(web_result, Exception):
-        errors.append(f"Web scraper error: {web_result}")
-        web_result = {"company_name": company_name, "pages": [], "combined_text": "", "pages_scraped": 0}
-    if isinstance(ext_result, Exception):
-        errors.append(f"External research error: {ext_result}")
-        ext_result = {"combined_text": ""}
-    if isinstance(fin_result, Exception):
-        errors.append(f"Financial analyst error: {fin_result}")
-        fin_result = {"combined_text": ""}
+    # Merge per-agent status with the external researcher's per-source detail.
+    source_status = {"web_scraper": web_state, "financial": fin_state}
+    source_status.update(ext_result.get("source_status", {}))
+    if ext_state.startswith("failed"):
+        source_status["external_research"] = ext_state
 
     # Update company name with what scraper found (more accurate)
     scraped_name = web_result.get("company_name", "")
@@ -172,7 +183,10 @@ def gather_all_data(state: AgentState) -> AgentState:
 
     pages = web_result.get("pages_scraped", len(web_result.get("pages", [])))
     progress.append(f"Scraped {pages} pages from {url}")
-    progress.append("External research completed (news, funding, LinkedIn, competitors)")
+    ok_sources = [k for k, v in source_status.items() if v == "ok"]
+    failed_sources = [k for k, v in source_status.items() if v.startswith("failed")]
+    progress.append(f"External research: {len(ok_sources)} sources ok"
+                    + (f", {len(failed_sources)} unavailable" if failed_sources else ""))
 
     is_public = fin_result.get("is_public", False)
     ticker = fin_result.get("ticker", "")
@@ -196,6 +210,8 @@ def gather_all_data(state: AgentState) -> AgentState:
         },
         "news_items": fin_result.get("news_items", []),
         "pages_scraped": pages,
+        "research_evidence": ext_result.get("evidence", []),
+        "source_status": source_status,
         "progress": progress,
         "errors": errors,
     }
@@ -215,6 +231,9 @@ def synthesize_report_node(state: AgentState) -> AgentState:
         external_research=state["external_research"],
         financial_data=state["financial_data"],
         groq_api_key=state["groq_api_key"],
+        evidence=state.get("research_evidence", []),
+        source_status=state.get("source_status", {}),
+        errors=state.get("errors", []),
     )
 
     progress.append("Report generated successfully.")
@@ -267,6 +286,8 @@ def run_pipeline(url: str, groq_api_key: str) -> AgentState:
         "raw_financial": {},
         "news_items": [],
         "pages_scraped": 0,
+        "research_evidence": [],
+        "source_status": {},
         "final_report": "",
         "progress": [],
         "errors": [],

@@ -1,0 +1,92 @@
+{
+ "run_at": "2026-07-03T17:53:48.163835+00:00",
+ "overall_accuracy_pct": 100.0,
+ "total_pass": 9,
+ "total_cases": 9,
+ "suites": {
+  "research_coverage": {
+   "cases": [
+    {
+     "company": "Stripe",
+     "expected": ">=3 evidence",
+     "got": "evidence=28,failed=[]",
+     "status": "PASS",
+     "latency_s": 18.78,
+     "error": null
+    },
+    {
+     "company": "Databricks",
+     "expected": ">=3 evidence",
+     "got": "evidence=28,failed=[]",
+     "status": "PASS",
+     "latency_s": 17.62,
+     "error": null
+    },
+    {
+     "company": "Canva",
+     "expected": ">=3 evidence",
+     "got": "evidence=28,failed=['sec_8k']",
+     "status": "PASS",
+     "latency_s": 11.89,
+     "error": null
+    }
+   ]
+  },
+  "no_fabricated_financials": {
+   "cases": [
+    {
+     "company": "Stripe",
+     "expected": "no fabricated financials",
+     "got": "is_public=False,ticker=None",
+     "status": "PASS",
+     "latency_s": 7.49,
+     "error": null
+    },
+    {
+     "company": "Databricks",
+     "expected": "no fabricated financials",
+     "got": "is_public=False,ticker=None",
+     "status": "PASS",
+     "latency_s": 6.17,
+     "error": null
+    },
+    {
+     "company": "Canva",
+     "expected": "no fabricated financials",
+     "got": "is_public=False,ticker=None",
+     "status": "PASS",
+     "latency_s": 7.61,
+     "error": null
+    }
+   ]
+  },
+  "entity_gate": {
+   "cases": [
+    {
+     "company": "Stripe",
+     "expected": "verified or empty",
+     "got": "ok",
+     "status": "PASS",
+     "latency_s": 0.0,
+     "error": null
+    },
+    {
+     "company": "Databricks",
+     "expected": "verified or empty",
+     "got": "ok",
+     "status": "PASS",
+     "latency_s": 0.09,
+     "error": null
+    },
+    {
+     "company": "Canva",
+     "expected": "verified or empty",
+     "got": "ok",
+     "status": "PASS",
+     "latency_s": 0.08,
+     "error": null
+    }
+   ]
+  }
+ }
+}

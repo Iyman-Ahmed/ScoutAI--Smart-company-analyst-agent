@@ -978,6 +978,7 @@ def analyze_company(url: str, groq_api_key: str, progress=gr.Progress(track_tqdm
     is_public    = raw_fin.get("is_public", False)
     errors       = state.get("errors", [])
     news_items   = state.get("news_items", [])
+    source_status = state.get("source_status", {})
 
     # Build charts + HTML widgets
     stock_fig        = build_stock_chart(raw_fin, company_name)
@@ -999,7 +1000,17 @@ def analyze_company(url: str, groq_api_key: str, progress=gr.Progress(track_tqdm
         fin_status = "📋 SEC EDGAR (historical filings)"
     else:
         fin_status = "🔒 private company"
-    err_note = f" · ⚠️ {len(errors)} warning(s)" if errors else ""
+    # Source health — name which sources succeeded vs failed instead of an opaque count,
+    # so a failed source is never invisibly read as "no data" (a data-integrity fix).
+    ok_sources = [k for k, v in source_status.items() if v == "ok"]
+    failed_sources = [k.replace("_", " ") for k, v in source_status.items() if v.startswith("failed")]
+    if failed_sources:
+        src_note = f" · ⚠️ unavailable: {', '.join(failed_sources)}"
+    elif source_status:
+        src_note = f" · {len(ok_sources)} sources ✓"
+    else:
+        src_note = ""
+    err_note = src_note
     status = f"✅ Analyzed **{pages} pages** · {fin_status}{err_note}"
 
     # Company header

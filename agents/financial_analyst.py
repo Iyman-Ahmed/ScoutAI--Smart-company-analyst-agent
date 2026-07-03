@@ -53,6 +53,20 @@ def _reset_crumb():
     _STATE["crumb"] = None
 
 
+def reset_session():
+    """
+    Drop the shared curl_cffi session and crumb.
+
+    Called by the orchestrator after an agent times out: a timed-out worker thread
+    cannot be killed and may still be mid-request holding the old session, so we
+    detach it here. New calls build a fresh session object, guaranteeing the zombie
+    thread and future requests never share ONE session concurrently (the exact
+    conflict this codebase is built to avoid).
+    """
+    _STATE["session"] = None
+    _STATE["crumb"] = None
+
+
 def _yf_get(url: str, retries: int = 3, delay: float = 2.0):
     s = _get_session()
     for attempt in range(retries):
@@ -1496,7 +1510,7 @@ def _build_raw_data_from_v8_edgar(ticker: str, edgar_annual: dict) -> dict:
 
 # ─── Main Entry Point ─────────────────────────────────────────────────────────
 
-def get_financial_data(company_name: str) -> dict:
+def get_financial_data(company_name: str, deadline=None) -> dict:
     """
     Fetch financial data for any company.
 
@@ -1506,8 +1520,13 @@ def get_financial_data(company_name: str) -> dict:
 
     EDGAR works purely by company name — no ticker required.
     If YF ticker lookup fails but EDGAR finds the company, we still return rich data.
+
+    `deadline` (agents.deadline.Deadline) is checked cooperatively at the coarse
+    fallback boundaries — it does not restructure the carefully-ordered YF chain.
     """
     from agents.sec_edgar import get_edgar_data
+    from agents.deadline import as_deadline
+    dl = as_deadline(deadline, 90)
 
     if not company_name:
         return {"is_public": False, "combined_text": "No company name provided.", "news_items": []}
@@ -1537,7 +1556,8 @@ def get_financial_data(company_name: str) -> dict:
         time.sleep(0.3)
         yf_annual  = fetch_annual_financials(ticker)
         time.sleep(0.3)
-        news_items = fetch_recent_news(company_name, ticker)
+        # News is the last, least-critical fetch — skip it if we're out of budget.
+        news_items = [] if dl.expired() else fetch_recent_news(company_name, ticker)
 
         if qs:
             raw_data = build_raw_data(ticker, qs)

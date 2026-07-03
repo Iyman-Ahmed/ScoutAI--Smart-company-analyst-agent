@@ -56,3 +56,7 @@ playwright-browsers/
 # HuggingFace cache
 .cache/
 CLAUDE.md
+
+# Generated nightly-precompute artifact
+precompute/
+scoutai_cache/
