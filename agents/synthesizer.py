@@ -23,6 +23,7 @@ Phase 3 — the $0 constraint made durable:
 
 import logging
 import os
+import re
 from datetime import datetime, timezone
 
 from config import GROQ_MODEL
@@ -30,7 +31,7 @@ from agents.evidence import (Evidence, TIER_LABEL, build_sources_appendix, evide
 
 logger = logging.getLogger(__name__)
 
-GROQ_SMALL_MODEL = "llama-3.1-8b-instant"   # cheap extraction pass (protects the 70B budget)
+GROQ_SMALL_MODEL = os.getenv("GROQ_SMALL_MODEL") or "llama-3.1-8b-instant"   # cheap extraction pass (protects the 70B budget)
 
 SYSTEM_PROMPT = """You are a senior business intelligence analyst writing a rigorous, sourced report.
 
@@ -140,6 +141,17 @@ DATA:
 
 # ─── Provider ladder ─────────────────────────────────────────────────────────
 
+def _log_llm_failure(rung: str, error: Exception, api_key: str = "") -> None:
+    """Retain provider diagnostics without exposing configured or BYO credentials."""
+    message = str(error)
+    for secret in (api_key, os.getenv("GROQ_API_KEY", ""), os.getenv("CEREBRAS_API_KEY", "")):
+        if secret:
+            message = message.replace(secret, "[REDACTED]")
+    message = re.sub(r"gsk_[A-Za-z0-9_-]+", "[REDACTED]", message)
+    message = re.sub(r"(?i)(bearer\s+)\S+", r"\1[REDACTED]", message)
+    logger.warning("LLM rung %s failed: %s: %s", rung, type(error).__name__, message)
+
+
 def _groq_call(model: str, system: str, human: str, api_key: str, max_tokens: int = 4096) -> str:
     from langchain_groq import ChatGroq
     from langchain_core.messages import HumanMessage, SystemMessage
@@ -155,7 +167,7 @@ def _cerebras_call(system: str, human: str, max_tokens: int = 4096) -> str:
     from cerebras.cloud.sdk import Cerebras  # optional dep; ImportError → next rung
     client = Cerebras(api_key=key)
     resp = client.chat.completions.create(
-        model="llama-3.3-70b",
+        model=os.getenv("CEREBRAS_MODEL") or "llama-3.3-70b",
         messages=[{"role": "system", "content": system}, {"role": "user", "content": human}],
         temperature=0.1, max_tokens=max_tokens,
     )
@@ -268,7 +280,7 @@ def synthesize_report(
                 contradictions_block = ("== EXTRACTED BRIEFING (facts / contradictions / unverified) ==\n"
                                         + briefing.strip() + "\n")
         except Exception as e:
-            logger.info(f"Extraction pass skipped ({e}); continuing single-pass.")
+            _log_llm_failure("groq-extraction/" + GROQ_SMALL_MODEL, e, groq_api_key)
 
     human = REPORT_TEMPLATE.format(
         company_name=company_name,
@@ -291,14 +303,17 @@ def synthesize_report(
         except Exception as e:
             msg = str(e).lower()
             rate_limited = "429" in msg or "rate limit" in msg or "rate_limit" in msg
-            logger.error(f"Groq synthesis failed (rate_limited={rate_limited}): {e}")
+            _log_llm_failure("groq-synthesis/" + GROQ_MODEL, e, groq_api_key)
+
+    else:
+        _log_llm_failure("groq-synthesis/" + GROQ_MODEL, RuntimeError("no GROQ_API_KEY"))
 
     if not report:
         try:
             report = _cerebras_call(SYSTEM_PROMPT, human)
             logger.info("Synthesis served by Cerebras fallback rung.")
         except Exception as e:
-            logger.info(f"Cerebras rung unavailable: {e}")
+            _log_llm_failure("cerebras-synthesis/" + (os.getenv("CEREBRAS_MODEL") or "llama-3.3-70b"), e, groq_api_key)
 
     if not report:
         banner = ("\n\n> ℹ️ *AI synthesis was rate-limited; showing a deterministic fact sheet. "
