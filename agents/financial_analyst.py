@@ -295,6 +295,7 @@ def fetch_stock_history(ticker: str) -> Optional[dict]:
         if not valid:
             return _stooq_fallback(ticker)
         return {
+            "source": "Yahoo Finance",
             "dates":  [x[0] for x in valid],
             "closes": [round(x[1], 2) for x in valid],
             "highs":  [round(x[2], 2) for x in valid],
@@ -316,6 +317,7 @@ def _stooq_fallback(ticker: str) -> Optional[dict]:
             return None
         df = df.sort_index()
         return {
+            "source": "Stooq",
             "dates":  [d.strftime("%Y-%m-%d") for d in df.index],
             "closes": [round(float(c), 2) for c in df["Close"]],
             "highs":  [round(float(h), 2) for h in df["High"]],
@@ -1457,6 +1459,7 @@ def _build_raw_data_from_v8_edgar(ticker: str, edgar_annual: dict) -> dict:
     return {
         "ticker":                 ticker,
         "company_name":           co_name,
+        "_yahoo_quote_available": price not in ("N/A", None, ""),
         "sector":                 sector,
         "industry":               industry,
         "country":                "United States",
@@ -1510,6 +1513,25 @@ def _build_raw_data_from_v8_edgar(ticker: str, edgar_annual: dict) -> dict:
 
 # ─── Main Entry Point ─────────────────────────────────────────────────────────
 
+def _has_quote_metrics(data):
+    return any(data.get(key) not in (None, "", "N/A") for key in
+               ("current_price", "market_cap", "revenue_ttm", "ebitda", "eps_trailing"))
+
+
+def _has_series_values(data):
+    # Dates/years alone are not financial observations.
+    if not isinstance(data, dict):
+        return False
+    for key, values in data.items():
+        if key in ("years", "dates", "source"):
+            continue
+        if isinstance(values, dict) and _has_series_values(values):
+            return True
+        if isinstance(values, list) and any(isinstance(v, (int, float)) for v in values):
+            return True
+    return False
+
+
 def get_financial_data(company_name: str, deadline=None) -> dict:
     """
     Fetch financial data for any company.
@@ -1548,6 +1570,8 @@ def get_financial_data(company_name: str, deadline=None) -> dict:
 
     # ── Case A: public company (have ticker) ───────────────────────────────
     if ticker:
+        yahoo_metrics = False
+        yahoo_partial = False
         qs         = fetch_quote_summary(ticker)
         time.sleep(0.4)
         hist       = fetch_stock_history(ticker)
@@ -1561,6 +1585,7 @@ def get_financial_data(company_name: str, deadline=None) -> dict:
 
         if qs:
             raw_data = build_raw_data(ticker, qs)
+            yahoo_metrics = _has_quote_metrics(raw_data)
         else:
             # Full 5-module quoteSummary blocked — try lighter 3-module request
             # (financialData + defaultKeyStatistics + assetProfile).
@@ -1571,17 +1596,31 @@ def get_financial_data(company_name: str, deadline=None) -> dict:
             if partial_qs:
                 logger.info(f"Lighter quoteSummary succeeded for {ticker}")
                 raw_data = build_raw_data(ticker, partial_qs)
+                yahoo_partial = _has_quote_metrics(raw_data)
             else:
                 raw_data = _build_raw_data_from_yf(ticker)
+                yahoo_metrics = _has_quote_metrics(raw_data)
                 if not raw_data.get("market_cap") or raw_data.get("market_cap") == "N/A":
                     logger.warning(f"yfinance also failed for {ticker} — using v8+EDGAR fallback")
                     raw_data = _build_raw_data_from_v8_edgar(ticker, edgar_annual)
+                    yahoo_partial = raw_data.pop("_yahoo_quote_available", False)
+                    yahoo_metrics = False
 
         # Always supplement with v7 quote — fills remaining N/A gaps (market cap,
         # P/E, EPS, beta, sector, industry) regardless of which path ran above.
         v7_data = _fetch_v7_quote(ticker)
         if v7_data:
+            yahoo_partial = yahoo_partial or any(v7_data.get(k) not in (None, "", "N/A") for k in ("regularMarketPrice", "marketCap", "trailingPE", "epsTrailingTwelveMonths", "beta"))
             _supplement_from_v7(raw_data, v7_data)
+
+        # SEC-derived metrics must never count as a successful Yahoo response.
+        yahoo_partial = yahoo_partial or _has_series_values(quarterly) or _has_series_values(yf_annual) or bool(hist and hist.get("source") == "Yahoo Finance")
+        yahoo_status = "ok" if yahoo_metrics else ("partial:some market data or fundamentals unavailable" if yahoo_partial else "failed:no usable Yahoo Finance data")
+        source_status = {"yahoo_finance": yahoo_status, "sec_edgar": "ok" if edgar_annual.get("years") else "empty"}
+        if hist and hist.get("source") == "Stooq":
+            source_status["stooq"] = "ok"
+        from financial_status import format_financial_status
+        source_note = format_financial_status(True, ticker, source_status)
 
         formatted = format_public_data(raw_data) if raw_data.get("revenue_ttm", "N/A") != "N/A" else (
             f"Ticker: {ticker}. Metrics temporarily unavailable."
@@ -1594,6 +1633,8 @@ def get_financial_data(company_name: str, deadline=None) -> dict:
         annual_text = _format_annual_for_llm(annual)
         if annual_text:
             formatted = formatted + "\n\n" + annual_text
+
+        formatted += "\n\nSource availability: " + source_note
 
         # Competitor detection
         sector          = raw_data.get("sector", "")
@@ -1621,6 +1662,7 @@ def get_financial_data(company_name: str, deadline=None) -> dict:
             "quarterly":     quarterly,
             "annual":        annual,
             "combined_text": formatted,
+            "source_status": source_status,
             "news_items":    news_items,
             "competitors":   competitors,
         }
@@ -1650,6 +1692,7 @@ def get_financial_data(company_name: str, deadline=None) -> dict:
             "quarterly":     {},
             "annual":        edgar_annual,
             "combined_text": summary,
+            "source_status": {"yahoo_finance": "failed:ticker lookup unavailable", "sec_edgar": "ok"},
             "news_items":    news_items,
             "competitors":   [],
         }

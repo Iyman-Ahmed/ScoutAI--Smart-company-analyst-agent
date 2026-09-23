@@ -211,11 +211,11 @@ def _template_floor(company_name, url, evidence, financial_data, source_status, 
                 lines.append(f"- {e.text}{tag}")
     if financial_data and financial_data.strip():
         lines += ["", "## Financial Data", financial_data.strip()[:4000]]
-    failed = [k for k, v in (source_status or {}).items() if v.startswith("failed")]
+    failed = [f"{k}: {v}" for k, v in (source_status or {}).items() if v.startswith(("failed", "partial"))]
     if failed or errors:
         lines.append("\n## Intelligence Gaps")
         for f in failed:
-            lines.append(f"- Source unavailable this run: {f}")
+            lines.append(f"- Source gap this run: {f}")
         for e in (errors or []):
             lines.append(f"- {e}")
     appendix = build_sources_appendix(evidence)
@@ -228,10 +228,10 @@ def _template_floor(company_name, url, evidence, financial_data, source_status, 
 # ─── Orchestration ───────────────────────────────────────────────────────────
 
 def _build_gaps_block(source_status: dict, errors: list) -> str:
-    failed = [k for k, v in (source_status or {}).items() if v.startswith("failed")]
+    failed = [f"{k}: {v}" for k, v in (source_status or {}).items() if v.startswith(("failed", "partial"))]
     bits = []
     for f in failed:
-        bits.append(f"- {f}: source failed/unavailable this run")
+        bits.append(f"- {f}")
     for e in (errors or []):
         bits.append(f"- {e}")
     return "\n".join(bits) if bits else "- None — all sources responded."

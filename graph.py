@@ -174,6 +174,10 @@ def gather_all_data(state: AgentState) -> AgentState:
     if web_state == "ok":
         web_state = web_result.get("source_status") or ("ok" if web_result.get("pages_scraped", 0) else "failed:no_readable_content")
     source_status = {"web_scraper": web_state, "financial": fin_state}
+    financial_sources = fin_result.get("source_status", {})
+    if financial_sources:
+        source_status.pop("financial", None)
+        source_status.update(financial_sources)
     source_status.update(ext_result.get("source_status", {}))
     if ext_state.startswith("failed"):
         source_status["external_research"] = ext_state

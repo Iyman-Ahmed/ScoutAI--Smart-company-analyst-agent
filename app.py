@@ -992,27 +992,23 @@ def analyze_company(url: str, groq_api_key: str, progress=gr.Progress(track_tqdm
     trader_scorecard = build_trader_scorecard(raw_fin)
 
     # Status line — show data source clearly
-    annual_source = raw_fin.get("annual", {}).get("source", "")
-    if is_public and ticker:
-        fin_status = f"📈 {ticker} · Yahoo Finance"
-        if annual_source == "SEC EDGAR":
-            fin_status += " + SEC EDGAR"
-    elif is_public and annual_source == "SEC EDGAR":
-        fin_status = "📋 SEC EDGAR (historical filings)"
-    else:
-        fin_status = "🔒 private company"
+    from financial_status import format_financial_status
+    fin_status = format_financial_status(is_public, ticker, source_status)
     # Source health — name which sources succeeded vs failed instead of an opaque count,
     # so a failed source is never invisibly read as "no data" (a data-integrity fix).
     ok_sources = [k for k, v in source_status.items() if v == "ok"]
-    failed_sources = [k.replace("_", " ") for k, v in source_status.items() if v.startswith("failed")]
+    failed_sources = [k.replace("_", " ") for k, v in source_status.items() if v.startswith(("failed", "partial"))]
     if failed_sources:
-        src_note = f" · ⚠️ unavailable: {', '.join(failed_sources)}"
+        src_note = f" · ⚠️ source gaps: {', '.join(failed_sources)}"
     elif source_status:
         src_note = f" · {len(ok_sources)} sources ✓"
     else:
         src_note = ""
     err_note = src_note
     status = f"{format_scrape_status(pages, source_status.get('web_scraper', ''))} · {fin_status}{err_note}"
+
+    if source_status.get("yahoo_finance", "").startswith(("failed", "partial")):
+        status = status.replace("✅", "⚠️")
 
     # Company header
     company_header = f"# {company_name} — Full AI Report"
