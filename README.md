@@ -12,7 +12,7 @@ short_description: Name or URL → intelligence report + financial dashboard.
 
 # 🔍 ScoutAI — Smart Company Analyst Agent
 
-> **Type any company name or paste a URL. Get an investment-grade intelligence report with live financial charts in under 90 seconds.**
+> **Type any company name or paste a URL. Get an structured company intelligence report with live financial charts in under 90 seconds.**
 
 [![HuggingFace Space](https://img.shields.io/badge/🤗%20HuggingFace-Live%20Demo-yellow)](https://huggingface.co/spaces/Iyman-ahmed/ScoutAI-Smart-company-analyst-agent)
 [![GitHub](https://img.shields.io/badge/GitHub-Source%20Code-181717?logo=github)](https://github.com/Iyman-Ahmed/ScoutAI--Smart-company-analyst-agent)
