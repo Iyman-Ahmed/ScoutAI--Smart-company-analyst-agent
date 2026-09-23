@@ -26,12 +26,11 @@ import os
 import re
 from datetime import datetime, timezone
 
-from config import GROQ_MODEL
+from config import GROQ_MODEL, GROQ_EXTRACT_MODEL
 from agents.evidence import (Evidence, TIER_LABEL, build_sources_appendix, evidence_digest)
 
 logger = logging.getLogger(__name__)
 
-GROQ_SMALL_MODEL = os.getenv("GROQ_SMALL_MODEL") or "llama-3.1-8b-instant"   # cheap extraction pass (protects the 70B budget)
 
 SYSTEM_PROMPT = """You are a senior business intelligence analyst writing a rigorous, sourced report.
 
@@ -273,14 +272,14 @@ def synthesize_report(
     if groq_api_key:
         try:
             extract_input = f"{evidence_block}\n\nFINANCIAL:\n{financial_trimmed}\n\nWEBSITE:\n{website_trimmed}"
-            briefing = _groq_call(GROQ_SMALL_MODEL, "You extract facts precisely and never invent data.",
+            briefing = _groq_call(GROQ_EXTRACT_MODEL, "You extract facts precisely and never invent data.",
                                   EXTRACT_PROMPT.format(data=extract_input[:8000]),
                                   groq_api_key, max_tokens=1200)
             if briefing and briefing.strip():
                 contradictions_block = ("== EXTRACTED BRIEFING (facts / contradictions / unverified) ==\n"
                                         + briefing.strip() + "\n")
         except Exception as e:
-            _log_llm_failure("groq-extraction/" + GROQ_SMALL_MODEL, e, groq_api_key)
+            _log_llm_failure("groq-extraction/" + GROQ_EXTRACT_MODEL, e, groq_api_key)
 
     human = REPORT_TEMPLATE.format(
         company_name=company_name,

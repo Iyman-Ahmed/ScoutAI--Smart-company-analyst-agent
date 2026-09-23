@@ -7,6 +7,8 @@ load_dotenv()
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL = os.getenv("GROQ_MODEL") or "llama-3.3-70b-versatile"
 
+GROQ_EXTRACT_MODEL = os.getenv("GROQ_EXTRACT_MODEL") or "llama-3.1-8b-instant"
+
 # Scraping limits
 MAX_PAGES_TO_SCRAPE = 12
 MAX_CONTENT_LENGTH = 6000   # chars per page before truncation

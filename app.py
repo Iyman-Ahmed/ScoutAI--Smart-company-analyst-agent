@@ -1325,6 +1325,11 @@ with gr.Blocks(css=CSS, title="ScoutAI — Smart Company Analyst Agent") as demo
 
 
 if __name__ == "__main__":
+    from config import GROQ_MODEL, GROQ_EXTRACT_MODEL
+    from llm_health import warn_unavailable_models
+    warn_unavailable_models(os.getenv("GROQ_API_KEY", ""), {
+        "GROQ_MODEL": GROQ_MODEL, "GROQ_EXTRACT_MODEL": GROQ_EXTRACT_MODEL,
+    })
     demo.launch(
         server_name="0.0.0.0",
         server_port=7860,
