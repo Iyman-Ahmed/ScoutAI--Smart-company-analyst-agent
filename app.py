@@ -1281,25 +1281,25 @@ with gr.Blocks(css=CSS, title="ScoutAI — Smart Company Analyst Agent") as demo
           </svg>
           GitHub Repo
         </a>
-        <a href='https://iymanahmed.tech' target='_blank' rel='noopener'
+        <a href='https://iyman-ahmed.tech' target='_blank' rel='noopener'
            style='color:#64748B;text-decoration:none;display:flex;align-items:center;gap:5px'>
           <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='#64748B' stroke-width='2'>
             <circle cx='12' cy='12' r='10'/><line x1='2' y1='12' x2='22' y2='12'/>
             <path d='M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z'/>
           </svg>
-          iymanahmed.tech
+          iyman-ahmed.tech
         </a>
-        <a href='mailto:iyman12393@gmail.com'
+        <a href='mailto:contact@iyman-ahmed.tech'
            style='color:#64748B;text-decoration:none;display:flex;align-items:center;gap:5px'>
           <svg width='13' height='13' viewBox='0 0 24 24' fill='none' stroke='#64748B' stroke-width='2'>
             <path d='M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z'/>
             <polyline points='22,6 12,13 2,6'/>
           </svg>
-          iyman12393@gmail.com
+          contact@iyman-ahmed.tech
         </a>
       </div>
       <div style='font-size:0.72rem;color:#334155'>
-        &copy; 2025 Iyman Ahmed &nbsp;&middot;&nbsp; ScoutAI &nbsp;&middot;&nbsp;
+        &copy; 2026 Iyman Ahmed &nbsp;&middot;&nbsp; ScoutAI &nbsp;&middot;&nbsp;
         Data from public sources &nbsp;&middot;&nbsp; Not financial advice
       </div>
     </div>
