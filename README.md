@@ -40,7 +40,6 @@ All output lives on **one scrollable Full AI Report page**, organized as:
                           12 key trade metrics · Bullish Signals + Risk Flags
 
 🏦 Balance Sheet Health   D/E Ratio · Current Ratio · FCF · Cash · Debt
-⚔️  Competitor Table       Side-by-side metrics vs up to 3 sector peers
 📰 News Feed              Live recent headlines from Yahoo Finance + DuckDuckGo
 
 📄 Full AI Report         LLM-written structured intelligence report
@@ -186,7 +185,6 @@ Headquarters & founding year
 | **Stock** | Price · 52W High/Low · 52W Return % · Beta · Dividend Yield · Payout Ratio | Yahoo Finance |
 | **Analyst** | Target Price (high/mean/low) · Recommendation · Analyst Count | Yahoo Finance |
 | **Trader Signals** | Short Ratio · Upside to Target % · PEG Signal · Overall Signal | Yahoo Finance |
-| **Competitors** | Up to 3 sector peers — Market Cap · Revenue · Margins · P/E · ROE | Yahoo Finance |
 | **News** | Live headlines | Yahoo Finance + DuckDuckGo |
 
 ---
