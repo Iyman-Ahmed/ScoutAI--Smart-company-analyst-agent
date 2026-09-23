@@ -1225,13 +1225,13 @@ with gr.Blocks(css=CSS, title="ScoutAI — Smart Company Analyst Agent") as demo
 
     # Row 2: Stock chart + Revenue chart side by side
     with gr.Row():
-        stock_plot   = gr.Plot(label="", show_label=False)
-        revenue_plot = gr.Plot(label="", show_label=False)
+        stock_plot   = gr.Plot(label="Stock price history", show_label=True)
+        revenue_plot = gr.Plot(label="Annual revenue and net income", show_label=True)
 
     # Row 3: FCF chart + Margin expansion chart side by side
     with gr.Row():
-        trends_plot = gr.Plot(label="", show_label=False)
-        margin_plot = gr.Plot(label="", show_label=False)
+        trends_plot = gr.Plot(label="Operating and free cash flow", show_label=True)
+        margin_plot = gr.Plot(label="Annual profit margins", show_label=True)
 
     # Trader Scorecard (signal chips + key trade metrics)
     trader_scorecard_out = gr.HTML(value="")
