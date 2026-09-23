@@ -116,7 +116,7 @@ User Input (URL)
       │
       ▼
 ┌─────────────────────────┐
-│   Synthesizer Node       │  Groq LLM (llama-3.3-70b-versatile)
+│   Synthesizer Node       │  Groq LLM (openai/gpt-oss-120b)
 │                          │  Writes full structured intelligence report
 └─────────────────────────┘
       │
@@ -126,7 +126,7 @@ User Input (URL)
 ```
 
 **Orchestration:** LangGraph StateGraph
-**LLM:** Groq — `llama-3.3-70b-versatile` *(completely free)*
+**LLM:** Groq — `openai/gpt-oss-120b` *(completely free)*
 **Web Research:** DuckDuckGo Search *(no API key needed)*
 **Financial Data:** Yahoo Finance + SEC EDGAR *(both free, no API key)*
 **Web Scraping:** curl_cffi Chrome impersonation + Playwright fallback
@@ -234,7 +234,7 @@ python app.py
 
 | Component | Library | Cost |
 |---|---|---|
-| LLM | Groq `llama-3.3-70b-versatile` | Free |
+| LLM | Groq `openai/gpt-oss-120b` | Free |
 | Agent orchestration | LangGraph StateGraph | Free |
 | Web scraping | curl_cffi Chrome impersonation + BeautifulSoup4 | Free |
 | JS / captcha bypass | Playwright (optional fallback) | Free |
@@ -289,3 +289,5 @@ MIT License — see [LICENSE](LICENSE) for details.
 *Developed by [Iyman Ahmed](https://iymanahmed.tech) &nbsp;·&nbsp; [GitHub](https://github.com/Iyman-Ahmed/ScoutAI--Smart-company-analyst-agent) &nbsp;·&nbsp; [iyman12393@gmail.com](mailto:iyman12393@gmail.com)*
 
 *Built with LangGraph · Groq · DuckDuckGo · Yahoo Finance · SEC EDGAR · Gradio*
+
+Model overrides: `GROQ_MODEL` (default `openai/gpt-oss-120b`) and `GROQ_EXTRACT_MODEL` (default `openai/gpt-oss-20b`). GPT-OSS calls use low reasoning effort and hide reasoning from report text. The optional Cerebras rung (`llama-3.3-70b`) is **unverified**: account access and successful generation have not been tested.

@@ -34,6 +34,21 @@ class SynthesisFailures(unittest.TestCase):
         self.assertEqual(result,'LLM report')
         fallback.assert_not_called()
 
+    def test_reasoning_output_budget_and_truncation(self):
+        from types import SimpleNamespace
+        with patch('langchain_groq.ChatGroq') as client:
+            client.return_value.invoke.return_value = SimpleNamespace(content='Complete report', response_metadata={'finish_reason':'stop'})
+            self.assertEqual(s._groq_call('openai/gpt-oss-120b','system','human','key'), 'Complete report')
+            self.assertEqual(client.call_args.kwargs['reasoning_effort'], 'low')
+            self.assertEqual(client.call_args.kwargs['reasoning_format'], 'hidden')
+            self.assertEqual(client.call_args.kwargs['max_tokens'], 4096)
+            client.return_value.invoke.return_value.response_metadata = {'finish_reason':'length'}
+            with self.assertRaisesRegex(RuntimeError, 'truncated'):
+                s._groq_call('openai/gpt-oss-120b','system','human','key')
+            client.return_value.invoke.return_value.response_metadata = {'finish_reason':'stop'}
+            s._groq_call('custom-model','system','human','key')
+            self.assertNotIn('reasoning_effort', client.call_args.kwargs)
+
     def test_bearer_token_redacted(self):
         with self.assertLogs(s.logger,level='WARNING') as captured:
             s._log_llm_failure('test',RuntimeError('Authorization: Bearer unknown-secret'))

@@ -5,9 +5,9 @@ load_dotenv()
 
 # LLM Configuration — Groq is free at console.groq.com
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL = os.getenv("GROQ_MODEL") or "llama-3.3-70b-versatile"
+GROQ_MODEL = os.getenv("GROQ_MODEL") or "openai/gpt-oss-120b"
 
-GROQ_EXTRACT_MODEL = os.getenv("GROQ_EXTRACT_MODEL") or "llama-3.1-8b-instant"
+GROQ_EXTRACT_MODEL = os.getenv("GROQ_EXTRACT_MODEL") or "openai/gpt-oss-20b"
 
 # Scraping limits
 MAX_PAGES_TO_SCRAPE = 12

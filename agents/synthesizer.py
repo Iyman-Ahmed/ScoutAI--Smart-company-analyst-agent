@@ -154,12 +154,19 @@ def _log_llm_failure(rung: str, error: Exception, api_key: str = "") -> None:
 def _groq_call(model: str, system: str, human: str, api_key: str, max_tokens: int = 4096) -> str:
     from langchain_groq import ChatGroq
     from langchain_core.messages import HumanMessage, SystemMessage
-    llm = ChatGroq(model=model, api_key=api_key, temperature=0.1, max_tokens=max_tokens)
-    return llm.invoke([SystemMessage(content=system), HumanMessage(content=human)]).content
+    # Reasoning shares the output budget. Keep it small and out of report Markdown.
+    options = {"reasoning_effort": "low", "reasoning_format": "hidden"} if model.startswith("openai/gpt-oss-") else {}
+    llm = ChatGroq(model=model, api_key=api_key, temperature=0.1, max_tokens=max_tokens, **options)
+    response = llm.invoke([SystemMessage(content=system), HumanMessage(content=human)])
+    if response.response_metadata.get("finish_reason") == "length":
+        raise RuntimeError("Groq output exhausted its token budget; refusing a truncated report")
+    if not isinstance(response.content, str) or not response.content.strip():
+        raise RuntimeError("Groq returned no text")
+    return response.content
 
 
 def _cerebras_call(system: str, human: str, max_tokens: int = 4096) -> str:
-    """Optional second rung. Requires CEREBRAS_API_KEY and the cerebras SDK; else raises."""
+    """Unverified optional rung: account/model access has not been tested. Requires key and SDK."""
     key = os.environ.get("CEREBRAS_API_KEY", "")
     if not key:
         raise RuntimeError("no CEREBRAS_API_KEY")
