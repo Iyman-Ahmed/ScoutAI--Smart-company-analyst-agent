@@ -12,7 +12,7 @@ short_description: Name or URL → intelligence report + financial dashboard.
 
 # 🔍 ScoutAI — Smart Company Analyst Agent
 
-> **Type any company name or paste a URL. Get an structured company intelligence report with live financial charts in under 90 seconds.**
+> **Type any company name or paste a URL. Get a structured company intelligence report with live financial charts in under 90 seconds.**
 
 [![HuggingFace Space](https://img.shields.io/badge/🤗%20HuggingFace-Live%20Demo-yellow)](https://huggingface.co/spaces/Iyman-ahmed/ScoutAI-Smart-company-analyst-agent)
 [![GitHub](https://img.shields.io/badge/GitHub-Source%20Code-181717?logo=github)](https://github.com/Iyman-Ahmed/ScoutAI--Smart-company-analyst-agent)
@@ -23,7 +23,7 @@ short_description: Name or URL → intelligence report + financial dashboard.
 
 ## What It Does
 
-ScoutAI is a **multi-agent AI system** that fully analyzes any company from a company name or website URL. Three specialized agents run in parallel — crawling the official site, researching the web, and pulling live financial data — before a Groq LLM synthesizes everything into a structured intelligence report.
+ScoutAI uses **3 parallel agents plus a synthesizer** to research a company from its name or website URL. The parallel agents crawl the company site, research external sources, and retrieve financial data. A separate synthesizer combines the available evidence into a structured company intelligence report.
 
 All output lives on **one scrollable Full AI Report page**, organized as:
 
