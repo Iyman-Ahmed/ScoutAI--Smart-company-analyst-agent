@@ -305,6 +305,15 @@ def _pick_concept(gaap: dict, concepts: list[str]) -> list[tuple[str, float]]:
     return []
 
 
+def _merge_concepts_by_year(gaap: dict, concepts: list[str]) -> list[tuple[str, float]]:
+    """Fill missing years from alternate concepts, preserving priority on overlap."""
+    annual = {}
+    for concept in concepts:
+        for year, value in _annual_values(gaap, concept):
+            annual.setdefault(year, value)
+    return sorted(annual.items())
+
+
 def _to_billions(vals: list[tuple[str, float]]) -> dict[str, Optional[float]]:
     return {yr: round(v / 1e9, 4) for yr, v in vals}
 
@@ -337,7 +346,7 @@ def parse_financials(facts: dict, company_info: dict) -> dict:
     if not gaap:
         return {}
 
-    rev_raw    = _pick_concept(gaap, _REVENUE_CONCEPTS)
+    rev_raw    = _merge_concepts_by_year(gaap, _REVENUE_CONCEPTS)
     ni_raw     = _pick_concept(gaap, _NET_INCOME_CONCEPTS)
     gp_raw     = _pick_concept(gaap, _GROSS_PROFIT_CONCEPTS)
     op_raw     = _pick_concept(gaap, _OPERATING_INCOME_CONCEPTS)
