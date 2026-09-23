@@ -29,19 +29,35 @@ HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 }
 
-# Keywords that indicate a captcha / bot-block page
+# Check visible challenge language, not metadata such as <meta name="robots">.
 _BLOCK_SIGNALS = [
-    "captcha", "cf-challenge", "cloudflare", "access denied",
-    "robot", "are you human", "ddos-guard", "just a moment",
-    "enable javascript", "checking your browser", "ray id",
-    "please wait while we check", "security check",
+    "verify you are human", "verify that you are human", "are you a human",
+    "are you human", "checking your browser", "please wait while we check",
+    "access denied", "complete the captcha", "security verification",
 ]
 
 
 def _is_blocked(text: str) -> bool:
-    """Return True if the response looks like a captcha or bot-block page."""
-    sample = text[:4000].lower()
-    return any(sig in sample for sig in _BLOCK_SIGNALS)
+    soup = BeautifulSoup(text, "lxml")
+    title = soup.title.get_text(" ", strip=True).lower() if soup.title else ""
+    for tag in soup.find_all(["script", "style", "meta", "noscript"]):
+        tag.decompose()
+    visible = soup.get_text(" ", strip=True).lower()[:4000]
+    return (title in {"just a moment...", "access denied", "attention required! | cloudflare"}
+            or any(signal in visible for signal in _BLOCK_SIGNALS))
+
+
+def format_scrape_status(pages: int, source_status: str) -> str:
+    if pages > 0:
+        return f"✅ Analyzed **{pages} pages**"
+    if "blocked" in source_status:
+        reason = "site blocked automated access"
+    elif "timeout" in source_status:
+        reason = "website request timed out"
+    else:
+        reason = "website unavailable or no readable content"
+    return f"⚠️ Website: **0 pages read** — {reason}"
+
 
 # Tags to strip (noise)
 NOISE_TAGS = ["script", "style", "noscript", "svg", "img", "video",
@@ -96,27 +112,26 @@ def _clean_text(soup: BeautifulSoup) -> str:
     return raw[:MAX_CONTENT_LENGTH]
 
 
-def _fetch_page(url: str, session: cffi_requests.Session) -> Optional[dict]:
+def _fetch_page(url: str, session: cffi_requests.Session, failures: Optional[list] = None) -> Optional[dict]:
+    failures = failures if failures is not None else []
     try:
         resp = session.get(url, headers=HEADERS, timeout=REQUEST_TIMEOUT, allow_redirects=True)
         if resp.status_code != 200:
             logger.warning(f"HTTP {resp.status_code} for {url}")
+            failures.append("blocked_http_" + str(resp.status_code) if resp.status_code in (401, 403, 429) else "http_" + str(resp.status_code))
             return None
-        # Detect captcha / Cloudflare block
+        # A challenge is an unavailable source; do not attempt to bypass it.
         if _is_blocked(resp.text):
-            logger.warning(f"Bot-block detected at {url} — will try Playwright fallback")
-            html = _try_playwright_fallback(url)
-            if not html:
-                return None
-            soup = BeautifulSoup(html, "lxml")
-            title = soup.title.string.strip() if soup.title and soup.title.string else url
-            return {"url": url, "title": title, "content": _clean_text(soup)}
+            logger.warning("Website challenge at %s (HTTP %s)", url, resp.status_code)
+            failures.append("blocked_challenge")
+            return None
         soup = BeautifulSoup(resp.text, "lxml")
         title = soup.title.string.strip() if soup.title and soup.title.string else url
         text = _clean_text(soup)
         return {"url": resp.url, "title": title, "content": text}
     except Exception as e:
         logger.warning(f"Failed to fetch {url}: {e}")
+        failures.append("timeout" if "timeout" in str(e).lower() else type(e).__name__)
         return None
 
 
@@ -176,7 +191,11 @@ def _ddg_find_website(company_name: str) -> Optional[str]:
                 "instagram", "youtube", "crunchbase", "bloomberg",
                 "techcrunch", "wsj", "forbes", "reuters",
             ]):
-                return href.split("?")[0].rstrip("/")
+                # Search results often point to a product/drivers subpage.
+                # Start the company crawl at the discovered origin instead.
+                parsed = urlparse(href)
+                if parsed.scheme in ("https", "http") and parsed.netloc:
+                    return f"{parsed.scheme}://{parsed.netloc}"
     except Exception as e:
         logger.debug(f"DDG website search failed: {e}")
     return None
@@ -202,12 +221,13 @@ def scrape_website(url: str, deadline=None) -> dict:
     session = cffi_requests.Session(impersonate="chrome131")
     scraped = []
     visited = set()
+    failures = []
 
     # --- Step 1: Scrape homepage ---
-    home_data = _fetch_page(url, session)
+    home_data = _fetch_page(url, session, failures)
     if not home_data:
         # Try with trailing slash
-        home_data = _fetch_page(url + "/", session)
+        home_data = _fetch_page(url + "/", session, failures)
     if not home_data:
         # Guessed URL didn't work — try to find the real website via DDG
         # Extract company name from the guessed URL slug (www.COMPANY.com)
@@ -217,9 +237,10 @@ def scrape_website(url: str, deadline=None) -> dict:
         if real_url:
             logger.info(f"DDG found website for '{slug}': {real_url}")
             url = real_url
-            home_data = _fetch_page(url, session)
+            home_data = _fetch_page(url, session, failures)
     if not home_data:
-        return {"company_name": "", "pages": [], "combined_text": "Could not access the website.", "pages_scraped": 0}
+        return {"company_name": "", "pages": [], "combined_text": "", "pages_scraped": 0,
+                "source_status": "failed:" + (failures[-1] if failures else "unavailable")}
 
     scraped.append(home_data)
     visited.add(home_data["url"])
@@ -230,10 +251,15 @@ def scrape_website(url: str, deadline=None) -> dict:
     # Check if JS rendering needed (too little content on homepage)
     if len(home_data["content"]) < 300:
         html_fallback = _try_playwright_fallback(url)
-        if html_fallback:
+        if html_fallback and not _is_blocked(html_fallback):
             soup = BeautifulSoup(html_fallback, "lxml")
             home_data["content"] = _clean_text(soup)
             scraped[0] = home_data
+
+    # Do not count an empty HTML shell as a successfully read page.
+    if not home_data["content"].strip():
+        return {"company_name": company_name, "pages": [], "combined_text": "",
+                "pages_scraped": 0, "source_status": "failed:no_readable_content"}
 
     # --- Step 2: Get all internal links ---
     home_resp = session.get(url, headers=HEADERS, timeout=REQUEST_TIMEOUT, allow_redirects=True)
@@ -277,6 +303,7 @@ def scrape_website(url: str, deadline=None) -> dict:
         "pages": scraped,
         "combined_text": combined_text,
         "pages_scraped": len(scraped),
+        "source_status": "ok",
     }
 
 

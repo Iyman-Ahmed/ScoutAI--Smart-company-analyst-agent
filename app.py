@@ -20,6 +20,7 @@ import matplotlib.dates as mdates
 import gradio as gr
 
 from graph import run_pipeline
+from agents.web_scraper import format_scrape_status
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -1011,7 +1012,7 @@ def analyze_company(url: str, groq_api_key: str, progress=gr.Progress(track_tqdm
     else:
         src_note = ""
     err_note = src_note
-    status = f"✅ Analyzed **{pages} pages** · {fin_status}{err_note}"
+    status = f"{format_scrape_status(pages, source_status.get('web_scraper', ''))} · {fin_status}{err_note}"
 
     # Company header
     company_header = f"# {company_name} — Full AI Report"

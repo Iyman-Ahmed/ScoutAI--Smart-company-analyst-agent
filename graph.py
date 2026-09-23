@@ -171,6 +171,8 @@ def gather_all_data(state: AgentState) -> AgentState:
     executor.shutdown(wait=False)
 
     # Merge per-agent status with the external researcher's per-source detail.
+    if web_state == "ok":
+        web_state = web_result.get("source_status") or ("ok" if web_result.get("pages_scraped", 0) else "failed:no_readable_content")
     source_status = {"web_scraper": web_state, "financial": fin_state}
     source_status.update(ext_result.get("source_status", {}))
     if ext_state.startswith("failed"):
